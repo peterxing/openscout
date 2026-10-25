@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>OpenScout</title>
+    <link rel="icon" href="/assets/icon-64.png" />
+    <link rel="stylesheet" href="/styles.css" />
+    <link rel="stylesheet" id="hljs-theme" href="/vendor/hljs-light.css" />
+    <script src="/vendor/marked.js"></script>
+    <script src="/vendor/purify.js"></script>
+    <script src="/vendor/highlight.js"></script>
+    <script type="module" src="/app.js"></script>
+  </head>
+  <body>
+    <div id="app">
+      <aside id="sidebar">
+        <div class="brand">
+          <img src="/assets/icon-64.png" alt="" />
+          <span>OpenScout</span>
+        </div>
+        <button id="new-chat" class="btn primary block" title="New conversation (Ctrl+N)">
+          <span class="ico">＋</span> New conversation
+        </button>
+        <div class="search-wrap">
+          <input id="session-search" type="search" placeholder="Search conversations" autocomplete="off" />
+        </div>
+        <nav id="session-list" aria-label="Conversations"></nav>
+        <div class="nav-links">
+          <button class="nav-link" data-view="automations"><span class="ico">⏱</span> Automations</button>
+          <button class="nav-link" data-view="memory"><span class="ico">🧠</span> Memory</button>
+          <button class="nav-link" data-view="skills"><span class="ico">🧩</span> Skills</button>
+          <button class="nav-link" data-view="settings"><span class="ico">⚙</span> Settings</button>
+        </div>
+        <div id="status-pills"></div>
+      </aside>
+
+      <main id="main">
+        <section id="view-chat" class="view">
+          <header class="chat-header">
+            <h1 id="chat-title" spellcheck="false">New conversation</h1>
+            <div class="header-right">
+              <span id="usage" class="muted small" title="Context window usage"></span>
+              <select id="model-select" title="Model"></select>
+            </div>
+          </header>
+          <div id="messages" aria-live="polite"></div>
+          <footer id="composer">
+            <div id="slash-menu" class="popover" hidden></div>
+            <div id="attachments"></div>
+            <div class="composer-box">
+              <textarea id="input" rows="1" placeholder="Ask OpenScout anything…   Type / for skills"></textarea>
+              <div class="composer-actions">
+                <button id="attach" class="icon-btn" title="Attach images">📎</button>
+                <input id="file-input" type="file" accept="image/*" multiple hidden />
+                <span id="intent" class="muted small"></span>
+                <button id="stop" class="btn danger" hidden>■ Stop</button>
+                <button id="send" class="btn primary" title="Send (Enter)">Send</button>
+              </div>
+            </div>
+            <div class="composer-hint muted small">Enter to send · Shift+Enter for a new line · Powered by GitHub Copilot + Work IQ</div>
+          </footer>
+        </section>
+        <section id="view-automations" class="view page" hidden></section>
+        <section id="view-memory" class="view page" hidden></section>
+        <section id="view-skills" class="view page" hidden></section>
+        <section id="view-settings" class="view page" hidden></section>
+      </main>
+    </div>
+    <div id="toasts"></div>
+    <div id="modal-root"></div>
+    <div id="conn-banner" hidden>Reconnecting to OpenScout…</div>
+  </body>
+</html>

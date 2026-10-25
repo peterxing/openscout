@@ -1,0 +1,45 @@
+{
+  "name": "openscout",
+  "productName": "OpenScout",
+  "version": "0.1.0",
+  "private": true,
+  "description": "A Scout-style desktop work assistant powered by GitHub Copilot (Copilot SDK), with Microsoft 365 data through the user's Work IQ access to Microsoft Graph. Does not call Microsoft 365 Copilot APIs unless you opt in.",
+  "type": "module",
+  "main": "dist/electron/main.js",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/peterxing/openscout.git"
+  },
+  "homepage": "https://github.com/peterxing/openscout#readme",
+  "bugs": {
+    "url": "https://github.com/peterxing/openscout/issues"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "start": "npm run build && electron .",
+    "web": "npm run build && node dist/server/main.js --open",
+    "serve": "node dist/server/main.js",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "icon": "node scripts/make-icon.mjs",
+    "test": "npm run build && node --test test/*.test.mjs"
+  },
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "dependencies": {
+    "@github/copilot-sdk": "^1.0.26",
+    "@highlightjs/cdn-assets": "^11.12.0",
+    "@microsoft/workiq": "^1.0.1",
+    "@playwright/mcp": "^0.0.83",
+    "dompurify": "^3.4.17",
+    "marked": "^18.1.1",
+    "mermaid": "^12.2.0",
+    "ws": "^8.22.0"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.5",
+    "@types/ws": "^8.18.2",
+    "electron": "^41.10.7",
+    "typescript": "^7.0.2"
+  }
+}
