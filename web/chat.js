@@ -418,7 +418,7 @@ function renderWelcome() {
     h(
       "div",
       { class: "welcome" },
-      h("img", { src: "/assets/icon.png", alt: "" }),
+      h("img", { src: "assets/icon.png", alt: "" }),
       h("h2", {}, greeting()),
       h("div", { class: "muted" }, "Your desktop work assistant — GitHub Copilot models, with your Microsoft 365 data through Work IQ."),
       h("div", { class: "checks" }, statusPill("github"), statusPill("workiq")),

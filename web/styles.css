@@ -1052,6 +1052,18 @@ textarea {
   z-index: 70;
   box-shadow: var(--shadow);
 }
+#demo-banner {
+  flex: none;
+  padding: 7px 22px;
+  font-size: 12.5px;
+  text-align: center;
+  background: linear-gradient(90deg, var(--accent-soft), color-mix(in srgb, var(--accent-2) 14%, var(--panel)));
+  border-bottom: 1px solid var(--border);
+}
+#demo-banner a {
+  font-weight: 600;
+  white-space: nowrap;
+}
 
 ::-webkit-scrollbar {
   width: 10px;

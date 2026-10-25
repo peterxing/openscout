@@ -1,4 +1,4 @@
-import { $, applyTheme, connect, on, state, toast } from "./core.js";
+import { $, applyTheme, connect, DEMO, on, state, toast } from "./core.js";
 import { bindViewSwitcher, newChat, openSession, refreshWelcome, renderModels, renderSessionList, statusPill } from "./chat.js";
 import { bindOpenSession, renderAutomations, renderMemory, renderSettings, renderSkills } from "./views.js";
 
@@ -126,7 +126,7 @@ on("automation.run", (run) => {
 on("notify", (n) => {
   toast(n.title, n.body, { error: n.kind === "error", onClick: n.sessionId ? () => openSession(n.sessionId) : undefined });
   if (state.app?.host === "web" && document.hidden && "Notification" in window && Notification.permission === "granted") {
-    new Notification(n.title, { body: n.body, icon: "/assets/icon-64.png" });
+    new Notification(n.title, { body: n.body, icon: "assets/icon-64.png" });
   }
 });
 on("attention", (a) => {
@@ -136,8 +136,17 @@ on("attention", (a) => {
 on("ui.openSession", (p) => openSession(p.sessionId));
 on("ui.newChat", () => newChat());
 
-if (state.app?.host !== "electron" && "Notification" in window && Notification.permission === "default") {
+if (!DEMO && state.app?.host !== "electron" && "Notification" in window && Notification.permission === "default") {
   document.addEventListener("click", () => Notification.requestPermission().catch(() => undefined), { once: true });
+}
+
+if (DEMO) {
+  const banner = $("#demo-banner");
+  banner.append(
+    "Browser demo with fictional Contoso data — nothing leaves your browser and no AI or Microsoft 365 calls are made. ",
+    Object.assign(document.createElement("a"), { href: "https://github.com/peterxing/openscout", target: "_blank", rel: "noopener", textContent: "Get the real app on GitHub →" }),
+  );
+  banner.hidden = false;
 }
 
 connect();

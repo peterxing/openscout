@@ -4,6 +4,8 @@ A Scout-style desktop work assistant that runs on **your GitHub Copilot subscrip
 
 > **Unofficial project.** OpenScout is an independent personal project inspired by [Microsoft Scout](https://www.microsoft.com/en-us/copilot/blog/2026/06/02/introducing-microsoft-scout-your-always-on-personal-agent/). It is not affiliated with, endorsed by or supported by Microsoft or GitHub. Microsoft Scout, Microsoft 365, Work IQ and GitHub Copilot are trademarks of their respective owners. Use it at your own risk and in line with your organisation's policies.
 
+**[▶ Try the browser demo](https://peterxing.github.io/openscout/)**: the real UI with a simulated backend and fictional Contoso data. See [Browser demo](#browser-demo).
+
 - **Models**: GitHub Copilot, via the official [`@github/copilot-sdk`](https://www.npmjs.com/package/@github/copilot-sdk) (it bundles the Copilot agent runtime: shell, files, web search/fetch, sub-agents, skills, context compaction).
 - **Microsoft 365**: the [Work IQ CLI](https://github.com/microsoft/work-iq) MCP server (`@microsoft/workiq`). OpenScout exposes only its *entity* tools, which call Microsoft Graph with your delegated sign-in, plus a Microsoft Search tool built on them.
 - **Desktop shell**: Electron, with a tray icon, global shortcut and native notifications. The same UI also runs in a normal browser.
@@ -102,6 +104,14 @@ The first desktop launch creates a **Start Menu → OpenScout** shortcut. Window
 
 Set `OPENSCOUT_HOME` to use a different data folder.
 
+## Browser demo
+
+[peterxing.github.io/openscout](https://peterxing.github.io/openscout/) runs the same web UI against an in-browser simulated backend (`demo/demo-backend.js`). Use it to try the chat, tool cards, approval prompts, questions, automations, memory, skills and settings without installing anything.
+
+- **No real data or AI**: every conversation is scripted, and all people, mail and files are fictional (Contoso). The demo makes no network calls beyond loading the page, and it resets when you reload.
+- **Not the agent itself**: the real OpenScout backend controls your PC and your Microsoft 365 account, so it only ever listens on `127.0.0.1` and is never exposed publicly.
+- **Deployment**: GitHub Actions rebuilds and deploys the demo on every push to `main` (`.github/workflows/pages.yml`). Build it locally with `npm run site`, which writes `site/`.
+
 ## Differences from Microsoft Scout
 
 - **Notifications**: Scout's Teams relay bot is replaced by native desktop toasts and optional **email-to-self**. Microsoft Graph can't post to the Teams "notes to self" chat.
@@ -116,11 +126,12 @@ src/server/       backend (Copilot SDK, Work IQ, sessions, tools, scheduler, HTT
   tools/          custom tools exposed to the model
 src/electron/     desktop shell (window, tray, shortcut, notifications)
 web/              UI (vanilla ES modules; marked, DOMPurify, highlight.js, Mermaid)
-scripts/          icon generator
+demo/             simulated backend for the public browser demo
+scripts/          icon generator and static-site build
 test/             unit tests (node:test)
 ```
 
-- `npm run build` compiles TypeScript to `dist/`, `npm test` runs the unit tests and `npm run icon` regenerates the icons.
+- `npm run build` compiles TypeScript to `dist/`, `npm test` runs the unit tests, `npm run site` builds the browser demo into `site/`, and `npm run icon` regenerates the icons.
 - The UI talks to the backend through one WebSocket RPC surface. See `handle()` in `src/server/app.ts`.
 
 ## Troubleshooting

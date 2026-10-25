@@ -1,8 +1,10 @@
 // Shared client state, RPC over WebSocket, DOM + Markdown helpers.
 
 const params = new URLSearchParams(location.search);
-export const TOKEN = params.get("token") || sessionStorage.getItem("openscout.token") || "";
-if (params.get("token")) {
+/** Set by the static-site build: the UI talks to an in-browser simulated backend instead of the local server. */
+export const DEMO = window.OPENSCOUT_DEMO === true;
+export const TOKEN = DEMO ? "demo" : params.get("token") || sessionStorage.getItem("openscout.token") || "";
+if (!DEMO && params.get("token")) {
   sessionStorage.setItem("openscout.token", TOKEN);
   history.replaceState(null, "", location.pathname);
 }
@@ -56,9 +58,14 @@ export function rpc(method, params = {}) {
   });
 }
 
-export function connect() {
+function openSocket() {
+  if (DEMO) return import("./demo-backend.js").then((m) => new m.DemoSocket());
+  return Promise.resolve(new WebSocket(`ws://${location.host}/ws?token=${encodeURIComponent(TOKEN)}`));
+}
+
+export async function connect() {
   const banner = document.getElementById("conn-banner");
-  ws = new WebSocket(`ws://${location.host}/ws?token=${encodeURIComponent(TOKEN)}`);
+  ws = await openSocket();
   ws.onopen = () => {
     retry = 0;
     banner.hidden = true;
@@ -166,7 +173,7 @@ function fileUrlToPath(url) {
   else p = "/" + p;
   return p;
 }
-export const localFileUrl = (p) => `/local-file?token=${encodeURIComponent(TOKEN)}&path=${encodeURIComponent(p)}`;
+export const localFileUrl = (p) => `local-file?token=${encodeURIComponent(TOKEN)}&path=${encodeURIComponent(p)}`;
 
 window.marked.use({
   gfm: true,
@@ -251,7 +258,7 @@ export async function renderMermaidIn(root) {
     if (!window.mermaid) {
       mermaidLoad ??= new Promise((resolve, reject) => {
         const s = document.createElement("script");
-        s.src = "/vendor/mermaid.js";
+        s.src = "vendor/mermaid.js";
         s.onload = resolve;
         s.onerror = reject;
         document.head.append(s);
@@ -284,7 +291,7 @@ export function applyTheme() {
   const pref = state.settings?.theme ?? "system";
   const dark = pref === "dark" || (pref === "system" && media.matches);
   document.documentElement.dataset.theme = dark ? "dark" : "light";
-  $("#hljs-theme").setAttribute("href", dark ? "/vendor/hljs-dark.css" : "/vendor/hljs-light.css");
+  $("#hljs-theme").setAttribute("href", dark ? "vendor/hljs-dark.css" : "vendor/hljs-light.css");
 }
 media.addEventListener("change", applyTheme);
 

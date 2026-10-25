@@ -21,6 +21,7 @@
     "serve": "node dist/server/main.js",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "icon": "node scripts/make-icon.mjs",
+    "site": "npm run build && node scripts/build-site.mjs",
     "test": "npm run build && node --test test/*.test.mjs"
   },
   "engines": {
