@@ -1,6 +1,5 @@
 import path from "node:path";
-import { InteractionRequiredAuthError, PublicClientApplication, type AccountInfo } from "@azure/msal-node";
-import { DataProtectionScope, PersistenceCachePlugin, PersistenceCreator } from "@azure/msal-node-extensions";
+import { InteractionRequiredAuthError, PublicClientApplication, type AccountInfo, type ICachePlugin } from "@azure/msal-node";
 import { paths } from "./paths.js";
 import type { SettingsStore } from "./settings.js";
 import { Bus, errorMessage, log } from "./util.js";
@@ -321,20 +320,34 @@ export class GraphService {
   private async client(): Promise<PublicClientApplication> {
     const key = `${this.clientId()}|${this.tenant()}`;
     if (this.pca && this.pcaKey === key) return this.pca;
-    const persistence = await PersistenceCreator.createPersistence({
-      cachePath: path.join(paths.data, "m365-token-cache.bin"),
-      dataProtectionScope: DataProtectionScope.CurrentUser,
-      serviceName: "OpenScout",
-      accountName: "m365-token-cache",
-      usePlaintextFileOnLinux: false,
-    });
     this.pca = new PublicClientApplication({
       auth: { clientId: this.clientId(), authority: `https://login.microsoftonline.com/${this.tenant()}` },
-      cache: { cachePlugin: new PersistenceCachePlugin(persistence) },
+      cache: { cachePlugin: await this.cachePlugin() },
     });
     this.pcaKey = key;
     this.account = null;
     return this.pca;
+  }
+
+  /**
+   * Encrypted on-disk token cache (DPAPI on Windows). Loaded lazily because it pulls in native modules;
+   * if they're unavailable, tokens stay in memory only and the user signs in again after a restart.
+   */
+  private async cachePlugin(): Promise<ICachePlugin | undefined> {
+    try {
+      const { DataProtectionScope, PersistenceCachePlugin, PersistenceCreator } = await import("@azure/msal-node-extensions");
+      const persistence = await PersistenceCreator.createPersistence({
+        cachePath: path.join(paths.data, "m365-token-cache.bin"),
+        dataProtectionScope: DataProtectionScope.CurrentUser,
+        serviceName: "OpenScout",
+        accountName: "m365-token-cache",
+        usePlaintextFileOnLinux: false,
+      });
+      return new PersistenceCachePlugin(persistence);
+    } catch (err) {
+      log("graph", `Encrypted token cache unavailable, so sign-in won't persist across restarts: ${errorMessage(err)}`);
+      return undefined;
+    }
   }
 
   private async token(forceRefresh = false): Promise<string> {

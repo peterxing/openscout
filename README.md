@@ -180,6 +180,7 @@ test/             unit tests (node:test)
 - **"GitHub Copilot · not signed in"**: run `copilot login` in a terminal, then *Settings → I've signed in*.
 - **"Need admin approval" when signing in to Microsoft 365**: your organisation must approve the app. See [For schools and IT admins](#for-schools-and-it-admins).
 - **HTTP 403 from Microsoft Graph**: your sign-in lacks that permission. Teams channel messages and class assignments are optional groups that an administrator must approve.
+- **Asked to sign in to Microsoft 365 after every restart**: the encrypted token cache couldn't load, so tokens are only kept in memory (the backend log says why). Run `npm install` again to restore its native modules.
 - **Work IQ provider errors such as `CircuitOpen` / "dependency is temporarily unavailable"**: these are transient service errors; ask again.
 - **"Access denied for the requested path" (Work IQ provider)**: Work IQ only allows certain Graph paths. Ask the agent to use `m365_search_paths`, or switch to direct sign-in.
 - **Browser automation doesn't start**: switch the browser channel (*Settings → Tools*) or install Microsoft Edge.
