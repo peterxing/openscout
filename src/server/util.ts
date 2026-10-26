@@ -99,6 +99,14 @@ export class Bus extends EventEmitter {
   }
 }
 
+// Logging is best-effort: if stdout/stderr is a closed pipe (e.g. the launching terminal exited),
+// Node reports EPIPE as an 'error' event, which would otherwise crash the app.
+for (const stream of [process.stdout, process.stderr]) stream?.on?.("error", () => {});
+
 export function log(scope: string, ...args: unknown[]): void {
-  console.log(`[${new Date().toISOString()}] [${scope}]`, ...args);
+  try {
+    console.log(`[${new Date().toISOString()}] [${scope}]`, ...args);
+  } catch {
+    // Ignore logging failures.
+  }
 }
