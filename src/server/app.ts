@@ -4,7 +4,9 @@ import fs from "node:fs";
 import path from "node:path";
 import { AutomationService } from "./automations.js";
 import { CopilotService } from "./copilot.js";
+import { GraphService } from "./graph.js";
 import { HttpServer, type ClientContext } from "./http.js";
+import { M365Service } from "./m365.js";
 import { MemoryStore } from "./memory.js";
 import { Notifier } from "./notify.js";
 import { APP_NAME, APP_VERSION, ensureDataDirs, paths } from "./paths.js";
@@ -38,6 +40,8 @@ export class OpenScoutApp {
   readonly settings: SettingsStore;
   readonly copilot: CopilotService;
   readonly workiq: WorkIqService;
+  readonly graph: GraphService;
+  readonly m365: M365Service;
   readonly memory: MemoryStore;
   readonly skills: SkillStore;
   readonly notifier: Notifier;
@@ -53,15 +57,17 @@ export class OpenScoutApp {
     fs.mkdirSync(this.settings.get().workingDirectory, { recursive: true });
     this.copilot = new CopilotService(this.bus, this.settings);
     this.workiq = new WorkIqService(this.bus, this.settings);
+    this.graph = new GraphService(this.bus, this.settings, (url) => this.openUrl(url));
+    this.m365 = new M365Service(this.bus, this.settings, this.workiq, this.graph);
     this.memory = new MemoryStore(this.bus);
     this.skills = new SkillStore(this.bus, this.settings);
-    this.notifier = new Notifier(this.bus, this.settings, this.workiq);
+    this.notifier = new Notifier(this.bus, this.settings, this.m365);
     this.automations = new AutomationService(this.bus, this.settings, this.notifier);
     this.transcripts = new TranscriptStore();
-    this.sessions = new SessionManager(this.bus, this.settings, this.copilot, this.workiq, this.memory, this.skills, this.transcripts);
+    this.sessions = new SessionManager(this.bus, this.settings, this.copilot, this.m365, this.memory, this.skills, this.transcripts);
     this.sessions.toolContext = {
       settings: this.settings,
-      workiq: this.workiq,
+      m365: this.m365,
       memory: this.memory,
       automations: this.automations,
       skills: this.skills,
@@ -76,7 +82,10 @@ export class OpenScoutApp {
   async start(opts: { port?: number } = {}): Promise<{ url: string; port: number; token: string }> {
     const port = await this.server.listen(opts.port ?? 0);
     void this.copilot.start().then(() => log("app", `GitHub Copilot: ${this.copilot.status.state}${this.copilot.status.login ? ` (${this.copilot.status.login})` : ""}`));
-    void this.workiq.start().then(() => log("app", `Work IQ: ${this.workiq.status.state}${this.workiq.status.user?.mail ? ` (${this.workiq.status.user.mail})` : ""}`));
+    void this.m365.start().then(() => {
+      const s = this.m365.status();
+      log("app", `Microsoft 365 (${s.provider === "graph" ? "direct Graph" : "Work IQ"}): ${s.state}${s.user?.mail ? ` (${s.user.mail})` : ""}`);
+    });
     this.automations.start();
     void this.sessions.prune(this.settings.get().sessionRetentionDays).then((n) => n && log("app", `Pruned ${n} old conversations`));
     return { url: `http://127.0.0.1:${port}/?token=${this.token}`, port, token: this.token };
@@ -84,7 +93,7 @@ export class OpenScoutApp {
 
   async stop(): Promise<void> {
     this.automations.stop();
-    this.workiq.stop();
+    this.m365.stop();
     await this.copilot.stop();
     await this.server.close();
   }
@@ -95,7 +104,7 @@ export class OpenScoutApp {
       app: { name: APP_NAME, version: APP_VERSION, host: this.hooks.host, dataDir: paths.data },
       settings: s,
       github: this.copilot.status,
-      workiq: this.workiq.status,
+      m365: this.m365.status(),
       models: this.copilot.modelSummaries(),
       personalities: PERSONALITIES.map(({ id, name, description }) => ({ id, name, description })),
       sessions: this.sessions.list(),
@@ -109,15 +118,29 @@ export class OpenScoutApp {
 
   private async onSettingsChanged(next: Settings, prev: Settings): Promise<void> {
     if (next.workingDirectory !== prev.workingDirectory) fs.mkdirSync(next.workingDirectory, { recursive: true });
-    if (next.m365.enabled !== prev.m365.enabled || next.m365.account !== prev.m365.account) {
-      await this.workiq.restart();
+    const m = (s: Settings) => JSON.stringify({ e: s.m365.enabled, p: s.m365.provider, a: s.m365.account, c: s.m365.clientId, t: s.m365.tenant, g: s.m365.scopeGroups });
+    if (m(next) !== m(prev)) {
+      await this.m365.start();
     } else if (next.m365.copilotLicense !== prev.m365.copilotLicense) {
-      await this.workiq.refreshStatus();
+      if (next.m365.provider === "workiq") await this.workiq.refreshStatus();
+      this.m365.publish();
     }
     if (JSON.stringify(next.skillSources) !== JSON.stringify(prev.skillSources)) this.bus.publish("skills.changed", this.skills.list());
     if (JSON.stringify(next.heartbeat) !== JSON.stringify(prev.heartbeat) || JSON.stringify(next.workHours) !== JSON.stringify(prev.workHours)) {
       this.automations.reschedule();
     }
+  }
+
+  /** Opens a URL in the user's default browser (used for Microsoft 365 sign-in). */
+  private async openUrl(url: string): Promise<void> {
+    if (!/^https:\/\/login\.microsoftonline\.com\//i.test(url)) throw new Error("Refusing to open an unexpected sign-in URL.");
+    if (process.env.OPENSCOUT_AUTH_NO_BROWSER === "1") {
+      log("graph", `Open this URL to sign in: ${url}`);
+      return;
+    }
+    if (this.hooks.openExternal) return this.hooks.openExternal(url);
+    if (process.platform === "win32") spawn("rundll32.exe", ["url.dll,FileProtocolHandler", url], { detached: true, stdio: "ignore" }).unref();
+    else spawn(process.platform === "darwin" ? "open" : "xdg-open", [url], { detached: true, stdio: "ignore" }).unref();
   }
 
   private openWithOs(target: string): { revealed: boolean } {
@@ -192,17 +215,18 @@ export class OpenScoutApp {
       case "models.refresh":
         await this.copilot.refreshModels();
         return this.copilot.modelSummaries();
-      case "workiq.refresh":
-        return this.workiq.client ? this.workiq.refreshStatus() : (await this.workiq.restart(), this.workiq.status);
-      case "workiq.restart":
-        await this.workiq.restart();
-        return this.workiq.status;
+      case "m365.refresh":
+        return this.m365.refresh();
+      case "m365.restart":
+        await this.m365.start();
+        return this.m365.status();
+      case "m365.signIn":
+        return this.m365.signIn();
+      case "m365.signOut":
+        return this.m365.signOut();
       case "workiq.acceptEula":
-        return this.workiq.acceptEula();
-      case "workiq.signIn":
-        return this.workiq.signIn();
-      case "workiq.signOut":
-        return this.workiq.signOut();
+        await this.workiq.acceptEula();
+        return this.m365.status();
 
       // Memory
       case "memory.list":

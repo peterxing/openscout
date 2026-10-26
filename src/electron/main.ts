@@ -27,7 +27,7 @@ function ensureStartMenuShortcut(): void {
       target: process.execPath,
       args: `"${app.getAppPath()}"`,
       cwd: app.getAppPath(),
-      description: "OpenScout — desktop work assistant (GitHub Copilot + Work IQ)",
+      description: "OpenScout — desktop assistant for work and study (GitHub Copilot + Microsoft 365)",
       icon: path.join(ASSETS_DIR, "icon.ico"),
       iconIndex: 0,
       appUserModelId: APP_ID,

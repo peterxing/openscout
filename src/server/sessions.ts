@@ -21,7 +21,7 @@ import { buildTools } from "./tools/app.js";
 import type { SessionLookup, ToolContext } from "./tools/context.js";
 import type { TranscriptEntry, TranscriptStore } from "./transcripts.js";
 import { Bus, errorMessage, log, newId, readJson, truncate, writeJson } from "./util.js";
-import type { WorkIqService } from "./workiq.js";
+import type { M365Service } from "./m365.js";
 
 export type Origin = "chat" | "automation";
 
@@ -119,7 +119,7 @@ export class SessionManager implements SessionLookup, HeadlessRunner {
     private readonly bus: Bus,
     private readonly settings: SettingsStore,
     private readonly copilot: CopilotService,
-    private readonly workiq: WorkIqService,
+    private readonly m365: M365Service,
     private readonly memory: MemoryStore,
     private readonly skills: SkillStore,
     private readonly transcripts: TranscriptStore,
@@ -214,7 +214,7 @@ export class SessionManager implements SessionLookup, HeadlessRunner {
 
   private async buildConfig(live: LiveSession, model: string): Promise<ResumeSessionConfig> {
     if (!this.toolContext) throw new Error("Tool context not initialised.");
-    await this.workiq.whenSettled(15_000);
+    await this.m365.whenSettled(15_000);
     const s = this.settings.get();
     const skills = this.skills.list();
     const info = this.copilot.models.find((m) => m.id === model);
@@ -229,7 +229,7 @@ export class SessionManager implements SessionLookup, HeadlessRunner {
         settings: s,
         memory: this.memory,
         skills,
-        workiq: this.workiq.status,
+        m365: this.m365.status(),
         origin: live.origin,
         automationName: live.automationName,
         automationReadOnly: !live.allowActions,
@@ -580,7 +580,7 @@ export class SessionManager implements SessionLookup, HeadlessRunner {
   private async onPermission(live: LiveSession, req: PermissionRequest, inv?: { promptRequest?: unknown }): Promise<PermissionRequestResult> {
     const s = this.settings.get();
     const automations = this.toolContext?.automations;
-    const summary = summarizePermission(req, this.workiq, {
+    const summary = summarizePermission(req, {
       automationAllowsActions: (idOrName) => automations?.get(idOrName)?.allowActions,
     });
     // Organisation-managed policy can require a human for this request: never auto-approve it.

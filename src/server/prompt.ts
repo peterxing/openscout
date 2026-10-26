@@ -1,8 +1,8 @@
 import type { SystemMessageConfig } from "@github/copilot-sdk";
+import type { M365Status } from "./m365.js";
 import type { MemoryStore } from "./memory.js";
 import type { Settings } from "./settings.js";
 import type { SkillInfo } from "./skills.js";
-import type { WorkIqStatus } from "./workiq.js";
 
 export interface Personality {
   id: string;
@@ -31,6 +31,14 @@ export const PERSONALITIES: Personality[] = [
     prompt: "Be encouraging and proactive: point out risks, opportunities and sensible next steps the user may not have asked for, briefly.",
   },
   {
+    id: "tutor",
+    name: "Tutor",
+    description: "Patient, explains step by step.",
+    prompt:
+      "Teach rather than tell: build understanding step by step with a worked example first, check understanding with a short question when it helps, " +
+      "and encourage the user to attempt the next step themselves before you reveal it.",
+  },
+  {
     id: "formal",
     name: "Formal",
     description: "Polished, executive-ready tone.",
@@ -42,7 +50,7 @@ export interface PromptInputs {
   settings: Settings;
   memory: MemoryStore;
   skills: SkillInfo[];
-  workiq: WorkIqStatus;
+  m365: M365Status;
   origin: "chat" | "automation";
   automationName?: string;
   automationReadOnly?: boolean;
@@ -77,15 +85,21 @@ const GRAPH_CHEATSHEET = `Useful Work IQ paths (Microsoft Graph conventions; alw
 - People: /me/people?$search="Alex"&$top=5 ; /me/manager ; /me/directReports ; /users/{upn}?$select=displayName,mail,jobTitle,department,officeLocation
 - To Do: /me/todo/lists ; /me/todo/lists/{list-id}/tasks
 - Actions (m365_action): /me/sendMail, /me/messages/{id}/reply | replyAll | forward | move, /me/events/{id}/accept | decline | tentativelyAccept, /me/findMeetingTimes, /me/calendar/getSchedule
-- Drafts: m365_create on /me/messages creates a draft without sending it.
-If a path is rejected, use m365_search_paths to find the supported one; use m365_get_schema only when you don't know a write payload.`;
+- Drafts: m365_create on /me/messages creates a draft without sending it.`;
+
+const EDUCATION_PATHS = `Teams for Education (needs the "Class assignments and rosters" permission group):
+- My classes: /education/me/classes?$select=id,displayName,description
+- Assignments: /education/me/assignments?$select=id,displayName,dueDateTime,status,classId&$top=50 (filter or sort the results yourself by dueDateTime)
+- One assignment with its submission: /education/classes/{class-id}/assignments/{assignment-id}?$expand=submissions`;
 
 export function buildSystemMessage(p: PromptInputs): SystemMessageConfig {
   const s = p.settings;
   const personality = PERSONALITIES.find((x) => x.id === s.personality) ?? PERSONALITIES[0];
-  const user = p.workiq.user;
-  const m365Ready = p.workiq.state === "ready";
-  const licensed = s.m365.copilotLicense && m365Ready;
+  const user = p.m365.user;
+  const m365Ready = p.m365.state === "ready";
+  const viaWorkIq = p.m365.provider === "workiq";
+  const licensed = viaWorkIq && s.m365.copilotLicense && m365Ready;
+  const education = s.m365.scopeGroups.includes("education") || viaWorkIq;
 
   const sections: string[] = [];
 
@@ -99,16 +113,31 @@ export function buildSystemMessage(p: PromptInputs): SystemMessageConfig {
   if (!s.m365.enabled) {
     sections.push(`<microsoft_365>Microsoft 365 access is turned off in Settings. If the user asks about mail, calendar, Teams or files in Microsoft 365, tell them to enable it under Settings → Microsoft 365.</microsoft_365>`);
   } else if (!m365Ready) {
-    sections.push(`<microsoft_365>Microsoft 365 (Work IQ) is not connected right now (status: ${p.workiq.state}${p.workiq.message ? ` — ${p.workiq.message.slice(0, 160)}` : ""}). If the user needs Microsoft 365 data, ask them to connect under Settings → Microsoft 365.</microsoft_365>`);
+    sections.push(`<microsoft_365>Microsoft 365 is not connected right now (status: ${p.m365.state}${p.m365.message ? ` — ${p.m365.message.slice(0, 160)}` : ""}). If the user needs Microsoft 365 data, ask them to sign in under Settings → Microsoft 365.</microsoft_365>`);
   } else {
     sections.push(`<microsoft_365>
-You can reach the user's Microsoft 365 data (Outlook mail and calendar, Teams chats and channels, OneDrive/SharePoint files, people and To Do) through Work IQ tools that call Microsoft Graph with the user's own delegated access. No Microsoft 365 Copilot licence is involved.
+You can reach the user's Microsoft 365 data (Outlook mail and calendar, Teams chats, OneDrive/SharePoint files, people and To Do) with tools that call Microsoft Graph using the user's own delegated sign-in (${viaWorkIq ? "through Work IQ" : "OpenScout signs in to Microsoft Graph directly"}). No Microsoft 365 Copilot licence is needed.
 - Start with m365_search for keyword lookups across mail (message), meetings (event), files (driveItem), Teams messages (chatMessage) and people (person). It accepts KQL such as from:alex, subject:"budget", filetype:pptx.
 - Use m365_fetch for exact reads by path, m365_function for Graph functions (delta, drive search, reminderView), m365_fetch_file to download a file's bytes to disk.
 - m365_create / m365_update / m365_delete / m365_action change data. The app asks the user to approve each of these.
-${licensed ? "- The user has a Microsoft 365 Copilot licence, so m365_copilot_ask (natural-language Q&A grounded in their tenant) and m365_copilot_retrieve (semantic retrieval with citations) are also available. Prefer them for broad 'what's the latest on…' questions." : "- Natural-language Microsoft 365 Copilot answers (Work IQ ask/retrieve) are switched off because they need a Microsoft 365 Copilot licence. Compose answers yourself from search and fetch results."}
+${
+  viaWorkIq
+    ? licensed
+      ? "- The user has a Microsoft 365 Copilot licence, so m365_copilot_ask (natural-language Q&A grounded in their tenant) and m365_copilot_retrieve (semantic retrieval with citations) are also available. Prefer them for broad 'what's the latest on…' questions."
+      : "- Natural-language Microsoft 365 Copilot answers (Work IQ ask/retrieve) are switched off because they need a Microsoft 365 Copilot licence. Compose answers yourself from search and fetch results."
+    : "- If Graph answers 403, the user's sign-in lacks that permission. Teams channel messages and class assignments are optional permission groups an administrator must approve; tell the user they can turn them on under Settings → Microsoft 365."
+}
 ${GRAPH_CHEATSHEET}
+${viaWorkIq ? "If a path is rejected, use m365_search_paths to find the supported one; use m365_get_schema only when you don't know a write payload." : "Use Microsoft Graph v1.0 conventions; prefix a path with /beta/ only when a feature exists solely in beta."}
+${education ? EDUCATION_PATHS : ""}
 </microsoft_365>`);
+  }
+
+  if (s.audience === "student") {
+    sections.push(`<student_context>
+The user is a student. Act as a supportive study partner: explain concepts with worked examples, check understanding, turn lecture material into notes and practice questions, and help plan study time around classes, deadlines and exams.
+Support academic integrity: don't produce graded work for the user to submit as their own. Coach instead — help them plan, outline, practise and improve their own drafts with feedback, and cite sources properly (APA 7th unless they ask for another style). If a request looks like doing an assessment for them, offer these alternatives.
+</student_context>`);
   }
 
   sections.push(`<outbound_and_privacy>
@@ -161,7 +190,7 @@ Finish with a concise, skimmable summary of what you found or did. If the prompt
       preamble: {
         action: "replace",
         content:
-          "You are OpenScout, a personal desktop work assistant. You are powered by GitHub Copilot models and act for the user with their own access: their local files and shell, a web browser, the web, and their Microsoft 365 data through Work IQ. Be genuinely useful: when the user describes what they need, pick the right tools and do it rather than just explaining how.",
+          "You are OpenScout, a personal desktop assistant for work and study. You are powered by GitHub Copilot models and act for the user with their own access: their local files and shell, a web browser, the web, and their Microsoft 365 data (Outlook, Teams, OneDrive and SharePoint). Be genuinely useful: when the user describes what they need, pick the right tools and do it rather than just explaining how.",
       },
       tone: {
         action: "replace",

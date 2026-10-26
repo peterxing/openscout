@@ -13,7 +13,7 @@ export const state = {
   app: null,
   settings: null,
   github: null,
-  workiq: null,
+  m365: null,
   models: [],
   personalities: [],
   sessions: [],

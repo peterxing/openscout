@@ -22,7 +22,7 @@ function refreshView(view) {
 }
 
 function renderPills() {
-  $("#status-pills").replaceChildren(statusPill("github"), statusPill("workiq"));
+  $("#status-pills").replaceChildren(statusPill("github"), statusPill("m365"));
   refreshWelcome();
 }
 
@@ -46,7 +46,7 @@ on("hello", (s) => {
     app: s.app,
     settings: s.settings,
     github: s.github,
-    workiq: s.workiq,
+    m365: s.m365,
     models: s.models,
     personalities: s.personalities,
     sessions: s.sessions,
@@ -83,6 +83,7 @@ on("settings.changed", (s) => {
   state.settings = s;
   applyTheme();
   renderModels();
+  refreshWelcome();
   refreshView("settings");
   refreshView("automations");
   refreshView("skills");
@@ -92,8 +93,8 @@ on("status.github", (g) => {
   renderPills();
   refreshView("settings");
 });
-on("status.workiq", (w) => {
-  state.workiq = w;
+on("status.m365", (m) => {
+  state.m365 = m;
   renderPills();
   refreshView("settings");
 });
@@ -143,7 +144,7 @@ if (!DEMO && state.app?.host !== "electron" && "Notification" in window && Notif
 if (DEMO) {
   const banner = $("#demo-banner");
   banner.append(
-    "Browser demo with fictional Contoso data — nothing leaves your browser and no AI or Microsoft 365 calls are made. ",
+    "Student demo with fictional Contoso University data — nothing leaves your browser, and no AI or Microsoft 365 calls are made. ",
     Object.assign(document.createElement("a"), { href: "https://github.com/peterxing/openscout", target: "_blank", rel: "noopener", textContent: "Get the real app on GitHub →" }),
   );
   banner.hidden = false;

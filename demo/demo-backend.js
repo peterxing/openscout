@@ -1,5 +1,5 @@
-// OpenScout browser demo: a simulated backend so the real UI can run on a static website.
-// Everything here is fictional Contoso sample data. No network, AI or Microsoft 365 calls are made.
+// OpenScout browser demo for students: a simulated backend so the real UI can run on a static website.
+// Everything here is fictional (Contoso University sample data). No network, AI or Microsoft 365 calls are made.
 import { describeSchedule, nextRun, parseSchedule } from "./schedule.js";
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -9,7 +9,12 @@ const WORK_HOURS = { start: "08:00", end: "18:00", days: [1, 2, 3, 4, 5] };
 const TOKEN_LIMIT = 272000;
 const NOT_IN_DEMO = "That needs the desktop app — it isn't available in the browser demo.";
 
-const USER = { displayName: "Alex Morgan", mail: "alex.morgan@contoso.com", userPrincipalName: "alex.morgan@contoso.com", jobTitle: "Product Manager" };
+const USER = {
+  displayName: "Alex Chen",
+  mail: "alex.chen@student.contoso.edu",
+  userPrincipalName: "alex.chen@student.contoso.edu",
+  jobTitle: "BSc Computer Science · Year 2",
+};
 
 const MODELS = [
   { id: "auto", name: "Auto", vision: true, reasoning: false, contextTokens: 0 },
@@ -22,21 +27,35 @@ const PERSONALITIES = [
   { id: "balanced", name: "Balanced", description: "Warm, clear and efficient." },
   { id: "concise", name: "Concise", description: "Minimal words, maximum signal." },
   { id: "coach", name: "Coach", description: "Proactive, suggests next steps." },
+  { id: "tutor", name: "Tutor", description: "Patient, explains step by step." },
   { id: "formal", name: "Formal", description: "Polished, executive-ready tone." },
 ];
 
-const M365_TOOLS = ["m365_fetch", "m365_fetch_file", "m365_create", "m365_update", "m365_delete", "m365_action", "m365_function", "m365_get_schema", "m365_search_paths"];
+const SCOPE_GROUPS = [
+  { id: "channels", label: "Teams channel messages" },
+  { id: "education", label: "Class assignments and rosters (Teams for Education)" },
+];
+const CORE_TOOLS = ["m365_search", "m365_fetch", "m365_function", "m365_fetch_file", "m365_create", "m365_update", "m365_delete", "m365_action"];
 
 function defaultSettings() {
   return {
     theme: "system",
     defaultModel: "auto",
     reasoningEffort: "",
-    personality: "balanced",
+    personality: "tutor",
+    audience: "student",
     timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
     workingDirectory: "C:\\Users\\alex\\Documents\\OpenScout",
     permissions: { mode: "auto-read", shellAllow: ["Get-ChildItem", "Get-Content", "Get-Date", "Test-Path"] },
-    m365: { enabled: true, copilotLicense: false, account: "" },
+    m365: {
+      enabled: true,
+      provider: "graph",
+      clientId: "6b1f0d8e-2c4a-4f7e-9a51-3d2e8c7b9f10",
+      tenant: "contoso.edu",
+      scopeGroups: ["education"],
+      copilotLicense: false,
+      account: "",
+    },
     browser: { enabled: true, channel: "msedge", headless: false },
     github: { mcpEnabled: true },
     notifications: { desktop: true, email: true },
@@ -44,7 +63,7 @@ function defaultSettings() {
       enabled: false,
       intervalMinutes: 60,
       schedule: "work-hours",
-      prompt: "Check unread email, my next 3 hours of meetings and Teams mentions. Only surface what needs attention soon; otherwise reply [[quiet]].",
+      prompt: "Check my school email, today's classes and Teams class posts. Only surface what needs attention soon; otherwise reply [[quiet]].",
       emailNotify: "never",
     },
     workHours: { ...WORK_HOURS },
@@ -72,6 +91,7 @@ function at(h, m, dayOffset = 0) {
 }
 const fmtTime = (d) => d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
 const fmtDay = (d) => d.toLocaleDateString([], { weekday: "long", day: "numeric", month: "long" });
+const fmtShortDay = (d) => d.toLocaleDateString([], { weekday: "short", day: "numeric", month: "short" });
 const fmtStamp = (d = new Date()) => d.toLocaleString([], { day: "numeric", month: "short", hour: "numeric", minute: "2-digit" });
 
 function makeTitle(prompt) {
@@ -86,97 +106,147 @@ const say = (text) => ({ type: "say", text });
 const think = (text) => ({ type: "think", text });
 const intent = (text) => ({ type: "intent", text });
 
-function calendarAnswer() {
+function classesAnswer() {
   const t = (h, m) => fmtTime(at(h, m));
   return [
     `### ${fmtDay(new Date())}`,
     "",
-    "| Time | Meeting | Notes |",
+    "| Time | Class | Where / notes |",
     "| --- | --- | --- |",
-    `| ${t(9, 30)}–${t(10, 0)} | Product sync | Standing agenda, Teams |`,
-    `| ${t(11, 0)}–${t(11, 45)} | **Fabrikam renewal call** | Dana Whitfield (CFO) + procurement |`,
-    `| ${t(11, 30)}–${t(12, 15)} | Design review: onboarding v2 | ⚠️ Overlaps the Fabrikam call |`,
-    `| ${t(14, 0)}–${t(14, 30)} | 1:1 with Jordan Lee | Bring the Q3 roadmap update |`,
-    `| ${t(15, 30)}–${t(17, 0)} | Focus time | |`,
+    `| ${t(9, 0)}–${t(11, 0)} | **ALGO2201 Lecture** — Graph algorithms | Lakeside Hall G03 |`,
+    `| ${t(11, 0)}–${t(12, 0)} | STAT2105 Tutorial — Problem set 9 | Science Hub 2.73 |`,
+    `| ${t(11, 30)}–${t(12, 0)} | HCID2300 Team 7 sync | ⚠️ Clashes with your STAT2105 tutorial (Teams) |`,
+    `| ${t(15, 0)}–${t(17, 0)} | Study block | Library, level 3 |`,
+    `| ${t(17, 30)} | ALGO2201 Quiz 4 closes | Teams Assignments |`,
     "",
-    "**Conflict:** the design review overlaps the Fabrikam call by 15 minutes. Want me to propose a new time to Sam Lee?",
+    "**Clash:** your Team 7 sync overlaps the STAT2105 tutorial. Want me to ask Mia, Leo and Priya to move it to 12:15?",
     "",
-    "**Prep:**",
-    "- Skim *Fabrikam Renewal Proposal.docx* (updated yesterday) and Priya's pricing email from Tuesday.",
-    "- Jordan asked for the Q3 roadmap slide — it's in *Contoso Q3 Planning.pptx*, slide 7.",
+    "**Prepare:** skim the Week 9 slides on Dijkstra's algorithm before the lecture, and bring your attempt at problem set 9, Q3, to the tutorial.",
   ].join("\n");
 }
 
-const INBOX_ANSWER = [
-  "**Unread in the last 24 hours: 6** — 2 need a reply",
+function assignmentsAnswer() {
+  const d = (n) => fmtShortDay(at(17, 0, n));
+  return [
+    "**Due in the next two weeks** — sorted by due date",
+    "",
+    "| Due | Course | Assignment | Status | Effort left |",
+    "| --- | --- | --- | --- | --- |",
+    `| Today 5:30pm | ALGO2201 | Quiz 4 (online, 20 min) | Not started | 20 min |`,
+    `| ${d(2)} 5pm | ALGO2201 | Assignment 2: Shortest paths (Python) | In progress (about 60%) | ~6 h |`,
+    `| ${d(4)} 11:59pm | STAT2105 | Problem set 9 | Not started | ~3 h |`,
+    `| ${d(5)} 5pm | HCID2300 | Project milestone 2: prototype (Team 7) | Team doc 40% | ~4 h each |`,
+    `| ${d(9)} 9am | ALGO2201 | Quiz 5 | Not started | revise BFS/DFS |`,
+    "",
+    "**Suggestion:** do Quiz 4 before 5:30pm today, then two 45-minute blocks on Assignment 2 tonight. Want me to add study blocks to your calendar?",
+  ].join("\n");
+}
+
+const LECTURE_NOTES = [
+  "### ALGO2201 Week 9 — Shortest paths (Dijkstra's algorithm)",
   "",
-  "1. **Priya Shah — “Q3 budget sign-off needed by Friday”** · needs your approval on the revised model. *Reply needed*",
-  "2. **Dana Whitfield (Fabrikam) — “Renewal: multi-year pricing?”** · wants options before today's call. *Reply needed*",
-  "3. Sam Lee — “Design review moved?” · FYI, superseded by the calendar update.",
-  "4. IT Communications — “Planned maintenance Saturday” · FYI.",
-  "5. Contoso Weekly — newsletter · no action.",
-  "6. Jordan Lee — “Great job on the launch” · a quick thanks would be nice.",
+  "**Key points**",
+  "- Dijkstra finds the shortest path from one source to every vertex when **all edge weights are non-negative**.",
+  "- It repeatedly takes the closest unvisited vertex (a min-priority queue) and *relaxes* its outgoing edges.",
+  "- With a binary heap it runs in **O((V + E) log V)**.",
+  "- Negative edges break it; use Bellman–Ford instead (O(VE)), which also detects negative cycles.",
   "",
-  "Want me to draft replies to Priya and Dana?",
+  "**Key terms:** relaxation, priority queue, shortest-path tree, greedy choice.",
+  "",
+  "**Practice questions**",
+  "1. Why does Dijkstra fail with a negative edge? Give a 3-vertex example.",
+  "2. Trace Dijkstra from A on the lecture's 5-vertex graph and list the order vertices are finalised.",
+  "3. What changes in the running time if you use an unsorted array instead of a heap?",
+  "",
+  "<details><summary>Show answers</summary>",
+  "",
+  "1. A finalised vertex can later be reached more cheaply through a negative edge, but Dijkstra never revisits it. Example: A→B (2), A→C (5), C→B (−4).",
+  "2. A, C, B, E, D (distances 0, 2, 3, 6, 8).",
+  "3. Finding the minimum costs O(V) each time, so the total becomes O(V²), which is better for dense graphs.",
+  "</details>",
 ].join("\n");
 
 const TEAMS_ANSWER = [
-  "**Teams today — 3 things for you**",
+  "**HCID2300 — Team 7 chat, since yesterday**",
   "",
-  "- **#launch-planning** — Sam Lee mentioned you: *“can you confirm the beta date is still the 14th?”* (10:12)",
-  "- **Chat with Priya Shah** — asked whether the budget model needs a contingency line (9:41)",
-  "- **Fabrikam account team** — the redlined contract was shared in Files (8:55)",
+  "- **Mia** uploaded the new wireframes to the team's Files tab and wants feedback by Wednesday.",
+  "- **Leo** asked who's presenting at Friday's milestone check-in. Nobody has replied yet.",
+  "- **Priya** needs your user-research notes by **Thursday** so she can finish the persona slide.",
   "",
-  "The beta-date question is the only one blocking someone.",
-].join("\n");
-
-const FILES_ANSWER = [
-  "Your most recently edited decks:",
-  "",
-  "| Deck | Last edited | Location |",
-  "| --- | --- | --- |",
-  "| Contoso Q3 Planning.pptx | yesterday | OneDrive › Planning |",
-  "| Fabrikam Renewal Proposal.pptx | 2 days ago | Sales › Fabrikam |",
-  "| Launch Readiness Review.pptx | last week | Product › Launch |",
-  "",
-  "Want a five-bullet summary of any of them?",
+  "Want me to draft a reply offering to present and confirming your notes will be ready Wednesday night?",
 ].join("\n");
 
 const DIAGRAM_ANSWER = [
-  "Here's how OpenScout fits together:",
+  "Here's a concept map comparing the two traversals:",
   "",
   "```mermaid",
-  "flowchart LR",
-  "  UI[Desktop UI] -->|WebSocket + token| BE[Local backend]",
-  "  BE --> SDK[GitHub Copilot SDK] --> M[(Copilot models)]",
-  "  BE --> WIQ[Work IQ MCP] --> G[(Microsoft Graph)]",
-  "  SDK --> PW[Playwright MCP] --> E[Microsoft Edge]",
+  "flowchart TB",
+  "  G[Graph traversal] --> B[Breadth-first search]",
+  "  G --> D[Depth-first search]",
+  "  B --> BQ[Uses a queue]",
+  "  B --> BS[Shortest paths in unweighted graphs]",
+  "  D --> DS[Uses a stack or recursion]",
+  "  D --> DT[Topological sort, cycle detection]",
+  "  BS --> DJ[Weighted edges? Use Dijkstra]",
   "```",
   "",
-  "Everything runs on your PC; the only cloud calls are to GitHub Copilot and Microsoft Graph with your own sign-in.",
+  "**Check yourself:** which one would you use to find the fewest flights between two airports, and why?",
+].join("\n");
+
+const INTEGRITY_ANSWER = [
+  "I can't write an assessment for you to submit as your own — that would breach your university's academic-integrity policy. I can help you get it done well yourself, though:",
+  "",
+  "1. **Unpack the brief:** I'll turn the marking rubric into a checklist.",
+  "2. **Plan:** I'll draft an outline with you, section by section.",
+  "3. **Get feedback:** paste a paragraph and I'll point out what's strong and what to tighten.",
+  "4. **Cite properly:** I'll format your references in APA 7th.",
+  "",
+  "Where would you like to start?",
 ].join("\n");
 
 const CAPABILITIES_ANSWER = [
-  "I'm OpenScout — a desktop work assistant. In the real app I can:",
+  "I'm OpenScout, a study assistant that runs on your laptop. With your school Microsoft 365 account and GitHub Copilot I can:",
   "",
-  "- **Microsoft 365** (through Work IQ): search and read your mail, calendar, Teams chats, OneDrive/SharePoint files and people; draft and — with your approval — send replies, accept meetings or create events.",
-  "- **Your PC**: run commands, read and edit files, and drive a browser for sites that need sign-in.",
-  "- **The web**: search and summarise pages.",
-  "- **Automations**: run prompts on a schedule (“every weekday at 8am”) or when something happens, and notify you.",
-  "- **Memory & skills**: remember your preferences and follow reusable playbooks like `/weekly-report`.",
+  "- **Stay on top of uni:** check your classes, assignments and deadlines, school email and Teams class chats.",
+  "- **Learn faster:** turn lecture slides into notes and practice questions, explain concepts step by step, and quiz you.",
+  "- **Plan:** build study plans around your timetable, and run automations such as a Sunday-evening weekly plan or a deadline radar.",
+  "- **Communicate:** draft emails to tutors or your project team. Nothing is sent without your OK.",
+  "- **Work with files:** read and organise documents, and draft outlines and reference lists, while you write your own assessments.",
   "",
-  "Anything that changes data or sends something on your behalf asks for your OK first. Try one of the scenarios on the home screen!",
+  "You don't need a Microsoft 365 Copilot licence. Students can get GitHub Copilot through GitHub Education.",
 ].join("\n");
 
 const DEFAULT_ANSWER = [
-  "This is the **browser demo** of OpenScout, so I can only play back a few scripted scenarios with fictional Contoso data — no AI model or Microsoft 365 account is connected.",
+  "This is the **student demo** of OpenScout, so I can only play back a few scripted scenarios with fictional Contoso University data. No AI model or Microsoft 365 account is connected.",
   "",
   "Try asking about:",
-  "- your **calendar** today, **unread email** or **Teams** mentions",
-  "- **finding a deck**, or **replying** to someone (you'll see an approval prompt)",
-  "- **creating an automation** (“every weekday at 8am…”), **remembering** a preference, or a **diagram**",
+  "- your **classes today**, **assignments due** or your **group project** chat",
+  "- turning **lecture slides into notes**, a **quiz**, or a **diagram** of a concept",
+  "- **emailing your tutor** for an extension (you'll see an approval prompt)",
+  "- a **weekly study plan** automation, or **remembering** your exam date",
   "",
-  "To use OpenScout for real, install it from GitHub — it runs on your own GitHub Copilot subscription and your Work IQ access.",
+  "To use OpenScout for real, install it from GitHub. You only need your school Microsoft 365 account and GitHub Copilot.",
+].join("\n");
+
+const STUDY_PLAN = [
+  "**Your study week** (45-minute blocks, built around your timetable)",
+  "",
+  "| Day | Plan |",
+  "| --- | --- |",
+  "| Mon | 2 × ALGO2201 Assignment 2 (finish Dijkstra implementation) |",
+  "| Tue | 1 × Assignment 2 tests and write-up · **due 5pm** |",
+  "| Wed | 2 × STAT2105 problem set 9 · send research notes to Priya |",
+  "| Thu | 1 × problem set 9 · **due 11:59pm** · 1 × HCID2300 prototype |",
+  "| Fri | Team 7 milestone check-in · 1 × revise BFS/DFS for Quiz 5 |",
+  "| Sat | Rest |",
+  "| Sun | 1 × weekly review · 1 × flashcards for the ALGO2201 exam (18 Nov) |",
+].join("\n");
+
+const RADAR = [
+  "**Assignment radar**",
+  "- ALGO2201 Quiz 4 closes **today 5:30pm**",
+  "- ALGO2201 Assignment 2 due **Tuesday 5pm** (about 6 hours left)",
+  "- New in Teams: HCID2300 milestone 2 rubric posted by Dr Okafor",
 ].join("\n");
 
 function scenarioFor(prompt, server) {
@@ -185,65 +255,53 @@ function scenarioFor(prompt, server) {
   if (/^\s*remember\b/.test(q) || /\bremember that\b/.test(q)) {
     const fact = prompt.replace(/^\s*(please\s+)?remember( that)?\s*/i, "").trim() || prompt.trim();
     return [
-      tool("memory_remember", { fact, category: "preference" }, "Saved to memory."),
-      { type: "effect", run: () => server.addMemory(fact, "preference", "agent") },
+      tool("memory_remember", { fact, category: "fact" }, "Saved to memory."),
+      { type: "effect", run: () => server.addMemory(fact, "fact", "agent") },
       say(`Got it — I'll remember that: *${fact}*. You can review it under **Memory**.`),
     ];
   }
 
-  if (/\b(automation|every (week)?day|weekdays?|every (mon|tue|wed|thu|fri)|remind|briefing|each morning)\b/.test(q)) {
-    let schedule = "every weekday at 8am";
-    try {
-      parseSchedule(prompt);
-      const m = /\b(every[^,.]*?\b(?:at|during)\b[^,.]*?(?:am|pm|\d{2}:\d{2}|hours))/i.exec(prompt);
-      schedule = m ? m[1].trim() : prompt;
-      parseSchedule(schedule);
-    } catch {
-      schedule = "every weekday at 8am";
+  if (/\b(write|do|complete|finish) (my|the) (essay|assignment|assessment|report|homework)\b/.test(q)) return [say(INTEGRITY_ANSWER)];
+
+  if (/\b(automation|every (week)?day|every (sunday|monday|weekday)|weekdays?|remind|radar|study plan|study week)\b/.test(q)) {
+    const plan = /study (plan|week)|plan my study|sunday/.test(q);
+    const name = plan ? "Weekly study plan" : /assignment|deadline|radar/.test(q) ? "Assignment radar" : "New automation";
+    let schedule = plan ? "every Sunday at 6pm" : "every weekday at 8am";
+    const m = /\b(every[^,.]*?\bat\b[^,.]*?(?:am|pm|\d{2}:\d{2}))/i.exec(prompt);
+    if (m) {
+      try {
+        parseSchedule(m[1]);
+        schedule = m[1].trim();
+      } catch {
+        // keep the default
+      }
     }
-    const name = /brief/.test(q) ? "Morning briefing" : /wrap|friday/.test(q) ? "Friday wrap-up" : "New automation";
-    const automationPrompt = /brief/.test(q)
-      ? "Brief me on today's meetings, urgent unread email and Teams mentions. Keep it to a short bulleted list."
-      : prompt.trim();
+    const automationPrompt = plan
+      ? "Plan my study week around my classes, deadlines and exams in 45-minute blocks with breaks. Show it as a day-by-day table."
+      : name === "Assignment radar"
+        ? "Check my school email and Teams class posts for new or changed assignments and deadlines. List what's due in the next 7 days."
+        : prompt.trim();
     return [
       intent("Setting up the automation"),
       tool("automation_create", { name, schedule, prompt: automationPrompt, desktopNotify: true }, `Saved automation "${name}".`),
-      {
-        type: "effect",
-        run: () => server.upsertAutomation({ name, schedule, prompt: automationPrompt, notify: { desktop: true, email: "never" } }),
-      },
+      { type: "effect", run: () => server.upsertAutomation({ name, schedule, prompt: automationPrompt, notify: { desktop: true, email: "never" } }) },
       { type: "say-dynamic", text: () => server.automationCreatedText(name) },
     ];
   }
 
-  if (/\b(unread|inbox)\b/.test(q) || (/\bemails?\b/.test(q) && /\b(summari[sz]e|triage|catch me up)\b/.test(q))) {
-    return [
-      intent("Checking your inbox"),
-      think("The user wants unread mail from the last day. I'll fetch unread inbox messages with a small $select, then group them by whether they need a reply."),
-      tool(
-        "m365_fetch",
-        { entityUrls: ["/me/mailFolders/inbox/messages?$filter=isRead eq false&$top=10&$select=subject,from,receivedDateTime,bodyPreview"] },
-        '{"results":[{"statusCode":200,"data":{"value":[{"subject":"Q3 budget sign-off needed by Friday","from":{"emailAddress":{"name":"Priya Shah"}}},{"subject":"Renewal: multi-year pricing?","from":{"emailAddress":{"name":"Dana Whitfield"}}},"… 4 more"]}}]}',
-      ),
-      say(INBOX_ANSWER),
-    ];
-  }
-
-  if (/\b(reply|respond|send|draft)\b/.test(q) && /\b(email|mail|priya|dana|jordan|sam|message)\b/.test(q)) {
-    const to = /dana/.test(q) ? { name: "Dana Whitfield", address: "dana.whitfield@fabrikam.com" } : { name: "Priya Shah", address: "priya.shah@contoso.com" };
+  if (/\b(email|reply|write to|message)\b/.test(q) && /\b(tutor|lecturer|professor|dr|extension|nguyen|teacher)\b/.test(q)) {
+    const to = { name: "Dr Maya Nguyen", address: "m.nguyen@contoso.edu" };
     const body =
-      to.name === "Priya Shah"
-        ? "Hi Priya, thanks for the revised model. I'll review it and confirm sign-off by Thursday. Alex"
-        : "Hi Dana, thanks for raising multi-year pricing. I'll bring two options to today's call. Alex";
+      "Dear Dr Nguyen,\n\nI've been unwell this week (I have a medical certificate) and I'm behind on ALGO2201 Assignment 2. Could I please have a one-week extension? I've also lodged a special consideration request.\n\nKind regards,\nAlex Chen (SID 4801 2219)";
     return [
-      say(`Here's a draft to **${to.name}**:\n\n> ${body}\n\nI'll send it once you approve.`),
+      say(`Here's a draft to **${to.name}**:\n\n> ${body.replace(/\n/g, "\n> ")}\n\nTip: most universities also want a formal special consideration request, so I mentioned it. I'll send this once you approve.`),
       {
         type: "permission",
         summary: {
           kind: "m365",
           permissionKind: "m365",
           title: "Send an email",
-          detail: `POST /me/sendMail\n\n${JSON.stringify({ message: { subject: "Re: your note", toRecipients: [{ emailAddress: to }], body: { contentType: "Text", content: body } } }, null, 2)}`,
+          detail: `POST /me/sendMail\n\n${JSON.stringify({ message: { subject: "ALGO2201 Assignment 2 — extension request", toRecipients: [{ emailAddress: to }], body: { contentType: "Text", content: body } } }, null, 2)}`,
           readOnly: false,
           risk: "high",
           allowSession: false,
@@ -251,61 +309,113 @@ function scenarioFor(prompt, server) {
         },
         onAllow: [
           tool("m365_action", { actionUrl: "/me/sendMail", jsonBody: { message: { toRecipients: [{ emailAddress: to }] } } }, "202 Accepted (demo — nothing was actually sent)"),
-          say(`Sent to ${to.name}. *(In this demo nothing leaves your browser.)*`),
+          say(`Sent to ${to.name}. *(In this demo nothing leaves your browser.)* Want a reminder on Wednesday if there's no reply?`),
         ],
-        onDeny: [say("No problem — I didn't send it. Want me to save it as a draft in Outlook instead?")],
+        onDeny: [say("No problem — I didn't send it. Want me to save it as a draft in Outlook so you can tweak it first?")],
       },
     ];
   }
 
-  if (/\b(teams|chats?|mention(ed|s)?|channel)\b/.test(q)) {
+  if (/\b(assignments?|deadlines?|due|homework)\b/.test(q)) {
     return [
-      intent("Catching up on Teams"),
-      tool("m365_search", { query: "Alex Morgan", entityTypes: ["chatMessage"], size: 10 }, "### Teams messages (chatMessage) — 7 matches, showing 1–7\n1. **Sam Lee** · #launch-planning …"),
+      intent("Checking your assignments"),
+      think("I'll read the student's Teams assignments, then cross-check school email for deadline changes the class posted."),
+      tool(
+        "m365_fetch",
+        { entityUrls: ["/education/me/assignments?$select=displayName,dueDateTime,status,classId&$top=50"] },
+        '{"statusCode":200,"data":{"value":[{"displayName":"Assignment 2: Shortest paths","dueDateTime":"…","status":"assigned"},"… 4 more"]}}',
+      ),
+      tool("m365_search", { query: "assignment OR deadline OR extension", entityTypes: ["message", "chatMessage"], size: 8 }, "### Emails (message) — 6 matches …\n### Teams messages (chatMessage) — 3 matches …"),
+      say(assignmentsAnswer()),
+    ];
+  }
+
+  if (/\b(teams|group|project|team 7|chats?|mention(ed|s)?)\b/.test(q)) {
+    return [
+      intent("Catching up on your group chat"),
+      tool("m365_search", { query: "HCID2300 Team 7", entityTypes: ["chatMessage"], size: 10 }, "### Teams messages (chatMessage) — 9 matches, showing 1–9 …"),
       say(TEAMS_ANSWER),
     ];
   }
 
-  if (/\b(ask me|choose|pick|which one)\b/.test(q)) {
+  if (/\b(quiz|test me|flashcards?)\b/.test(q)) {
     return [
       {
         type: "input",
-        question: "Which deck should I summarise?",
-        choices: ["Contoso Q3 Planning.pptx", "Fabrikam Renewal Proposal.pptx", "Launch Readiness Review.pptx"],
-        then: (answer) => [
-          tool("m365_fetch_file", { path: "/drives/demo/items/demo/content", format: "pdf" }, `Saved 2,481,233 bytes (application/pdf) to C:\\Users\\alex\\Documents\\OpenScout\\Downloads\\${answer.replace(/\.pptx$/, "")}.pdf`),
-          say(`**${answer}** in five bullets:\n\n- Q3 goal: grow active teams 25% through the onboarding v2 launch\n- Two bets: self-serve trials and a partner channel pilot\n- Budget: flat headcount, +12% marketing for the launch window\n- Risks: beta slipping past the 14th; Fabrikam renewal timing\n- Ask: decision on the partner pilot by the end of the month`),
-        ],
+        question: "Which topic should I quiz you on?",
+        choices: ["Graph traversal (BFS/DFS)", "Dijkstra's algorithm", "Big-O notation", "Probability basics"],
+        then: (answer) => [say(quizFor(answer))],
       },
     ];
   }
 
-  if (/\b(calendar|meetings?|schedule|today|agenda)\b/.test(q)) {
+  if (/\b(classes|class|timetable|lectures? today|calendar|today|schedule)\b/.test(q)) {
     return [
-      intent("Reading your calendar"),
+      intent("Reading your timetable"),
       tool(
         "m365_fetch",
-        { entityUrls: [`/me/calendarView?startDateTime=${iso(at(0, 0))}&endDateTime=${iso(at(23, 59))}&$select=subject,start,end,attendees`] },
-        '{"results":[{"statusCode":200,"data":{"value":["Product sync","Fabrikam renewal call","Design review: onboarding v2","1:1 with Jordan Lee","Focus time"]}}]}',
+        { entityUrls: [`/me/calendarView?startDateTime=${iso(at(0, 0))}&endDateTime=${iso(at(23, 59))}&$select=subject,start,end,location`] },
+        '{"statusCode":200,"data":{"value":["ALGO2201 Lecture","STAT2105 Tutorial","HCID2300 Team 7 sync","Study block"]}}',
       ),
-      tool("m365_search", { query: "Fabrikam renewal", entityTypes: ["message", "driveItem"], size: 5 }, "### Emails (message) — 4 matches\n1. **Renewal: multi-year pricing?** — Dana Whitfield\n### Files (driveItem) — 2 matches\n1. **Fabrikam Renewal Proposal.docx**"),
-      say(calendarAnswer()),
+      tool("m365_fetch", { entityUrls: ["/education/me/assignments?$select=displayName,dueDateTime&$top=10"] }, '{"statusCode":200,"data":{"value":["Quiz 4 (closes 5:30pm)","…"]}}'),
+      say(classesAnswer()),
     ];
   }
 
-  if (/\b(decks?|pptx?|powerpoint|files?|documents?|slides?|presentation)\b/.test(q)) {
+  if (/\b(lecture|slides?|notes|summari[sz]e|deck|pptx?|pdf)\b/.test(q)) {
     return [
-      intent("Searching your files"),
-      tool("m365_search", { query: "filetype:pptx", entityTypes: ["driveItem"], size: 5 }, "### Files (driveItem) — 23 matches, showing 1–5\n1. **Contoso Q3 Planning.pptx** — modified yesterday\n2. **Fabrikam Renewal Proposal.pptx**\n3. **Launch Readiness Review.pptx**"),
-      say(FILES_ANSWER),
+      intent("Finding your lecture slides"),
+      tool("m365_search", { query: "ALGO2201 Week 9 filetype:pptx", entityTypes: ["driveItem"], size: 5 }, "### Files (driveItem) — 4 matches\n1. **ALGO2201 Week 9 - Shortest paths.pptx** — modified yesterday"),
+      tool("m365_fetch_file", { path: "/drives/demo/items/demo/content", format: "pdf" }, "Saved 3,214,880 bytes (application/pdf) to C:\\Users\\alex\\Documents\\OpenScout\\Downloads\\ALGO2201 Week 9 - Shortest paths.pdf"),
+      say(LECTURE_NOTES),
     ];
   }
 
-  if (/\b(diagram|mermaid|flowchart|architecture|how (does|do) (it|you) work)\b/.test(q)) return [say(DIAGRAM_ANSWER)];
+  if (/\b(diagram|mermaid|concept map|mind ?map|flowchart|visuali[sz]e|bfs|dfs)\b/.test(q)) return [say(DIAGRAM_ANSWER)];
 
   if (/\b(what can you do|capabilit|help|tour|who are you)\b/.test(q)) return [say(CAPABILITIES_ANSWER)];
 
   return [say(DEFAULT_ANSWER)];
+}
+
+function quizFor(topic) {
+  const banks = {
+    "Graph traversal (BFS/DFS)": [
+      ["Which data structure does BFS use?", "A queue (first in, first out)."],
+      ["Which traversal finds the shortest path in an unweighted graph?", "BFS, because it explores vertices in order of distance."],
+      ["What is the time complexity of DFS with an adjacency list?", "O(V + E)."],
+      ["Name one problem DFS solves that BFS doesn't solve as naturally.", "Topological sorting (or cycle detection in directed graphs)."],
+      ["Can BFS loop forever on a graph with cycles?", "Not if you mark vertices as visited when you enqueue them."],
+    ],
+    "Dijkstra's algorithm": [
+      ["What must be true of edge weights for Dijkstra to be correct?", "They must be non-negative."],
+      ["Which data structure makes Dijkstra efficient?", "A min-priority queue (binary heap)."],
+      ["What does 'relaxing' an edge mean?", "Updating a neighbour's distance if going through the current vertex is shorter."],
+      ["Running time with a binary heap?", "O((V + E) log V)."],
+      ["Which algorithm handles negative edges?", "Bellman–Ford."],
+    ],
+    "Big-O notation": [
+      ["What's the Big-O of binary search?", "O(log n)."],
+      ["Simplify O(3n² + 10n + 7).", "O(n²)."],
+      ["Which grows faster: O(n log n) or O(n²)?", "O(n²)."],
+      ["Accessing an array element by index?", "O(1)."],
+      ["A loop inside a loop, both over n items?", "O(n²)."],
+    ],
+    "Probability basics": [
+      ["P(A or B) for mutually exclusive events?", "P(A) + P(B)."],
+      ["If P(A) = 0.3, what's P(not A)?", "0.7."],
+      ["Two fair coin flips: P(two heads)?", "0.25."],
+      ["What does it mean for A and B to be independent?", "P(A and B) = P(A) × P(B)."],
+      ["Expected value of a fair six-sided die?", "3.5."],
+    ],
+  };
+  const qs = banks[topic] ?? banks["Graph traversal (BFS/DFS)"];
+  return [
+    `**${topic} — five questions.** Try each one before you reveal the answer.`,
+    "",
+    ...qs.flatMap(([question, answer], i) => [`${i + 1}. ${question}`, "", `<details><summary>Show answer</summary>${answer}</details>`, ""]),
+    "How did you go? Tell me which ones you missed and I'll explain them with an example.",
+  ].join("\n");
 }
 
 // ── Seed data ───────────────────────────────────────────────────────────────
@@ -313,78 +423,80 @@ function scenarioFor(prompt, server) {
 function seedSessions() {
   const sessions = [];
   const add = (meta, transcript) => sessions.push({ meta: { titleSource: "user", model: "auto", origin: "chat", ...meta }, transcript, busy: false });
-  const morning = at(8, 0);
+  const twoHoursAgo = new Date(Date.now() - 2 * 3600e3);
   add(
-    { id: crypto.randomUUID(), title: "Prep me for the Fabrikam renewal call", createdAt: iso(new Date(Date.now() - 2 * 3600e3)), updatedAt: iso(new Date(Date.now() - 2 * 3600e3)), usage: { currentTokens: 31200, tokenLimit: TOKEN_LIMIT } },
+    { id: crypto.randomUUID(), title: "Explain Dijkstra's algorithm with an example", createdAt: iso(twoHoursAgo), updatedAt: iso(twoHoursAgo), usage: { currentTokens: 18400, tokenLimit: TOKEN_LIMIT } },
     [
-      { t: iso(), kind: "user", text: "Prep me for the Fabrikam renewal call — who's attending, what's open, and what should I watch out for?" },
-      { t: iso(), kind: "tool", toolCallId: rid("call_"), name: "m365_search", args: '{\n  "query": "Fabrikam renewal",\n  "entityTypes": ["message", "event", "driveItem"]\n}', success: true, result: "### Emails (message) — 4 matches …\n### Calendar events (event) — 1 match …\n### Files (driveItem) — 2 matches …" },
-      { t: iso(), kind: "tool", toolCallId: rid("call_"), name: "m365_fetch", args: '{\n  "entityUrls": ["/me/events/AAMkADemo?$select=subject,attendees,start,end"]\n}', success: true, result: '{"results":[{"statusCode":200,"data":{"subject":"Fabrikam renewal call","attendees":["Dana Whitfield","Lee Chen","Priya Shah"]}}]}' },
+      { t: iso(twoHoursAgo), kind: "user", text: "Explain Dijkstra's algorithm with an example — I don't get the lecture slides." },
       {
-        t: iso(),
+        t: iso(twoHoursAgo),
         kind: "assistant",
-        text: "### Fabrikam renewal — call brief\n\n**Attending:** Dana Whitfield (CFO), Lee Chen (procurement), Priya Shah (our pricing lead).\n\n**Open items**\n- Multi-year discount request (Dana's email, Tuesday)\n- Redlined contract §7 liability cap — legal hasn't responded\n- Usage dropped 8% last quarter in their EMEA teams\n\n**Watch out for:** they'll anchor on the usage dip; lead with the onboarding v2 roadmap.",
+        text: [
+          "Let's start with an example and get to the theory after.",
+          "",
+          "Imagine travel times from **A**: A→B = 4, A→C = 1, C→B = 2, B→D = 1.",
+          "",
+          "1. Start at A with distance 0. Everything else is ∞.",
+          "2. The closest unvisited vertex is **C** (1). Going C→B costs 1 + 2 = 3, which beats 4, so B becomes 3.",
+          "3. Next closest is **B** (3). Going B→D makes D = 4.",
+          "4. Then **D** (4). Done: A=0, C=1, B=3, D=4.",
+          "",
+          "```python",
+          "import heapq",
+          "def dijkstra(graph, src):",
+          "    dist = {v: float('inf') for v in graph}; dist[src] = 0",
+          "    pq = [(0, src)]",
+          "    while pq:",
+          "        d, u = heapq.heappop(pq)",
+          "        if d > dist[u]: continue",
+          "        for v, w in graph[u]:",
+          "            if d + w < dist[v]:",
+          "                dist[v] = d + w; heapq.heappush(pq, (dist[v], v))",
+          "    return dist",
+          "```",
+          "",
+          "**Quick check:** why do we skip `d > dist[u]` entries when they come off the queue?",
+        ].join("\n"),
       },
     ],
   );
+  const sixPm = at(18, 0);
+  const planAt = sixPm.getTime() < Date.now() ? sixPm : new Date(Date.now() - 3600e3);
   add(
-    { id: crypto.randomUUID(), title: `Morning briefing · ${fmtStamp(morning)}`, origin: "automation", automationName: "Morning briefing", createdAt: iso(morning), updatedAt: iso(morning) },
+    { id: crypto.randomUUID(), title: `Weekly study plan · ${fmtStamp(planAt)}`, origin: "automation", automationName: "Weekly study plan", createdAt: iso(planAt), updatedAt: iso(planAt) },
     [
-      { t: iso(morning), kind: "user", text: "Brief me on today's meetings, urgent unread email and Teams mentions. Keep it to a short bulleted list." },
-      { t: iso(morning), kind: "tool", toolCallId: rid("call_"), name: "m365_fetch", args: '{\n  "entityUrls": ["/me/calendarView?…"]\n}', success: true, result: "5 events" },
-      { t: iso(morning), kind: "tool", toolCallId: rid("call_"), name: "m365_search", args: '{\n  "query": "is:unread importance:high",\n  "entityTypes": ["message"]\n}', success: true, result: "2 matches" },
-      { t: iso(morning), kind: "assistant", text: MORNING_BRIEF },
+      { t: iso(planAt), kind: "user", text: "Plan my study week around my classes, deadlines and exams in 45-minute blocks with breaks. Show it as a day-by-day table." },
+      { t: iso(planAt), kind: "tool", toolCallId: rid("call_"), name: "m365_fetch", args: '{\n  "entityUrls": ["/me/calendarView?…", "/education/me/assignments?…"]\n}', success: true, result: "14 events · 5 assignments" },
+      { t: iso(planAt), kind: "assistant", text: STUDY_PLAN },
     ],
   );
-  const y = new Date(Date.now() - 26 * 3600e3);
+  const yesterday = new Date(Date.now() - 26 * 3600e3);
   add(
-    { id: crypto.randomUUID(), title: "Summarise the Q3 planning deck", createdAt: iso(y), updatedAt: iso(y) },
+    { id: crypto.randomUUID(), title: "Summarise the Week 8 lecture on hash tables", createdAt: iso(yesterday), updatedAt: iso(yesterday) },
     [
-      { t: iso(y), kind: "user", text: "Summarise the Contoso Q3 Planning deck in five bullets." },
-      { t: iso(y), kind: "tool", toolCallId: rid("call_"), name: "m365_search", args: '{\n  "query": "\\"Q3 Planning\\" filetype:pptx",\n  "entityTypes": ["driveItem"]\n}', success: true, result: "1. **Contoso Q3 Planning.pptx** — modified yesterday" },
-      { t: iso(y), kind: "tool", toolCallId: rid("call_"), name: "m365_fetch_file", args: '{\n  "path": "/drives/demo/items/demo/content",\n  "format": "pdf"\n}', success: true, result: "Saved 2,481,233 bytes (application/pdf) to C:\\Users\\alex\\Documents\\OpenScout\\Downloads\\Contoso Q3 Planning.pdf" },
+      { t: iso(yesterday), kind: "user", text: "Summarise the ALGO2201 Week 8 lecture on hash tables into notes and practice questions." },
+      { t: iso(yesterday), kind: "tool", toolCallId: rid("call_"), name: "m365_search", args: '{\n  "query": "ALGO2201 Week 8 filetype:pptx",\n  "entityTypes": ["driveItem"]\n}', success: true, result: "1. **ALGO2201 Week 8 - Hash tables.pptx**" },
+      { t: iso(yesterday), kind: "tool", toolCallId: rid("call_"), name: "m365_fetch_file", args: '{\n  "path": "/drives/demo/items/demo/content",\n  "format": "pdf"\n}', success: true, result: "Saved 2,481,233 bytes (application/pdf) to C:\\Users\\alex\\Documents\\OpenScout\\Downloads\\ALGO2201 Week 8 - Hash tables.pdf" },
       {
-        t: iso(y),
+        t: iso(yesterday),
         kind: "assistant",
-        text: "- Q3 goal: grow active teams 25% through the onboarding v2 launch\n- Two bets: self-serve trials and a partner channel pilot\n- Budget: flat headcount, +12% marketing for the launch window\n- Risks: beta slipping past the 14th; Fabrikam renewal timing\n- Ask: decision on the partner pilot by the end of the month",
+        text: "**Key points**\n- A hash table maps keys to buckets with a hash function, giving average O(1) lookups.\n- Collisions are handled by chaining (lists) or open addressing (probing).\n- Keep the load factor low (≈ 0.7) and resize when it grows.\n\n**Practice questions**\n1. What happens to lookup time when every key hashes to the same bucket?\n2. Compare linear probing and chaining for deletions.\n3. Why do resizes keep insertion amortised O(1)?",
       },
     ],
   );
   const d3 = new Date(Date.now() - 3 * 86400e3);
   add(
-    { id: crypto.randomUUID(), title: "Draft a reply to Priya about the budget", createdAt: iso(d3), updatedAt: iso(d3) },
+    { id: crypto.randomUUID(), title: "Ask Dr Nguyen about the quiz date", createdAt: iso(d3), updatedAt: iso(d3) },
     [
-      { t: iso(d3), kind: "user", text: "Draft a reply to Priya saying I'll review the budget model by Thursday — don't send it yet." },
-      { t: iso(d3), kind: "assistant", text: "Draft:\n\n> Hi Priya, thanks for the revised model. I'll review it and confirm sign-off by Thursday. Alex\n\nI'll save it to your Drafts folder." },
+      { t: iso(d3), kind: "user", text: "Draft an email to Dr Nguyen asking whether Quiz 5 covers Dijkstra. Don't send it yet." },
+      { t: iso(d3), kind: "assistant", text: "Draft:\n\n> Dear Dr Nguyen, does Quiz 5 cover Dijkstra's algorithm, or only BFS and DFS? Thank you, Alex Chen\n\nI'll save it to your Drafts folder." },
       { t: iso(d3), kind: "permission", title: "Create an email draft", detail: "POST /me/messages", decision: "once" },
-      { t: iso(d3), kind: "tool", toolCallId: rid("call_"), name: "m365_create", args: '{\n  "parentUrl": "/me/messages",\n  "jsonBody": { "subject": "Re: Q3 budget sign-off" }\n}', success: true, result: '{"statusCode":201,"data":{"isDraft":true}}' },
+      { t: iso(d3), kind: "tool", toolCallId: rid("call_"), name: "m365_create", args: '{\n  "parentUrl": "/me/messages",\n  "jsonBody": { "subject": "Quiz 5 topics" }\n}', success: true, result: '{"statusCode":201,"data":{"isDraft":true}}' },
       { t: iso(d3), kind: "assistant", text: "Saved as a draft in Outlook — it's in your **Drafts** folder whenever you're ready to send." },
     ],
   );
   return sessions;
 }
-
-const MORNING_BRIEF = [
-  "**Today**",
-  "- 5 meetings; the design review overlaps the **Fabrikam renewal call** (11:00)",
-  "- 1:1 with Jordan at 2pm — bring the Q3 roadmap update",
-  "",
-  "**Needs a reply**",
-  "- Priya Shah: Q3 budget sign-off by Friday",
-  "- Dana Whitfield (Fabrikam): multi-year pricing options",
-  "",
-  "**Teams**",
-  "- Sam Lee asked you to confirm the beta date in #launch-planning",
-].join("\n");
-
-const WRAP_UP = [
-  "**Week in review**",
-  "- Sent 34 emails; longest thread: Fabrikam renewal (12 messages)",
-  "- 14 meetings (9.5 hours); 3 hours of focus time protected",
-  "- Shipped: onboarding v2 beta plan; budget model v3 reviewed",
-  "",
-  "**Carry over**: Fabrikam contract §7, partner pilot decision",
-].join("\n");
 
 // ── Simulated server ────────────────────────────────────────────────────────
 
@@ -392,8 +504,7 @@ class DemoServer {
   constructor(deliver) {
     this.deliver = deliver;
     this.settings = defaultSettings();
-    this.github = { state: "signed-in", login: "alex-demo", host: "https://github.com", authType: "user", cliLoginAvailable: false };
-    this.workiq = { state: "ready", user: USER, serverVersion: "demo", tools: M365_TOOLS, copilotLicense: false };
+    this.github = { state: "signed-in", login: "alexchen-edu", host: "https://github.com", authType: "user", cliLoginAvailable: false };
     this.sessions = new Map(seedSessions().map((s) => [s.meta.id, s]));
     this.turns = new Map();
     this.perms = new Map();
@@ -401,29 +512,31 @@ class DemoServer {
     this.running = new Set();
     this.runs = [];
     this.memory = [
-      ["preference", "Alex prefers concise bullet-point summaries with links."],
-      ["fact", "Alex's manager is Jordan Lee (VP Product)."],
-      ["context", "The Fabrikam renewal is due 30 November; Priya Shah owns the pricing model."],
-      ["decision", "Weekly status reports go out on Fridays by 4pm."],
+      ["preference", "Alex studies best in 45-minute blocks with 10-minute breaks."],
+      ["fact", "ALGO2201 final exam is on 18 November at 9am."],
+      ["context", "Alex's HCID2300 project team (Team 7) is Mia, Leo and Priya."],
+      ["preference", "Alex likes a worked example before the theory."],
     ].map(([category, fact], i) => ({ id: rid("mem_"), fact, category, source: i % 2 ? "user" : "agent", createdAt: iso(new Date(Date.now() - (i + 1) * 86400e3)) }));
     this.skills = [
-      { name: "weekly-report", description: "Draft my weekly status report from this week's sent mail, meetings and Teams threads.", source: "openscout", editable: true, body: "1. Collect this week's sent mail, meetings and Teams threads.\n2. Group by project.\n3. Write wins, risks and next week's focus in under 200 words." },
-      { name: "meeting-prep", description: "Build a one-page brief before a customer meeting: attendees, history, open threads and risks.", source: "openscout", editable: true, body: "Find the meeting, its attendees and recent threads with them, then write a one-page brief." },
+      { name: "study-plan", description: "Plan my study week around classes, deadlines and exams in 45-minute blocks.", source: "openscout", editable: true, body: "1. Read my calendar and assignments for the next 7 days.\n2. Fit 45-minute study blocks with breaks around classes.\n3. Put the closest deadlines first and keep one rest day." },
+      { name: "lecture-notes", description: "Turn lecture slides or transcripts into concise notes, key terms and practice questions.", source: "openscout", editable: true, body: "Summarise into key points, key terms and three practice questions with hidden answers." },
+      { name: "cite-sources", description: "Format references and in-text citations in APA 7th edition.", source: "openscout", editable: true, body: "Ask for any missing details (author, year, title, publisher or URL) and format in APA 7th." },
+      { name: "flashcards", description: "Make spaced-repetition flashcards from my notes.", source: "openscout", editable: true, body: "Create question-and-answer cards, one fact per card, and save them as a CSV for Anki." },
       { name: "docx", description: "Create, read and edit Word documents.", source: "copilot-cli", editable: false, body: "Use python-docx to build and edit .docx files." },
       { name: "xlsx", description: "Create and analyse Excel workbooks, tables and charts.", source: "copilot-cli", editable: false, body: "Use openpyxl to build and edit .xlsx files." },
     ];
-    const briefingSession = [...this.sessions.values()].find((s) => s.meta.automationName === "Morning briefing");
+    const planSession = [...this.sessions.values()].find((s) => s.meta.automationName === "Weekly study plan");
     this.automations = [];
     this.createAutomation(
-      { name: "Morning briefing", description: "Daily start-of-day summary.", schedule: "every weekday at 8am", prompt: "Brief me on today's meetings, urgent unread email and Teams mentions. Keep it to a short bulleted list.", notify: { desktop: true, email: "never" } },
-      { silent: true, last: { status: "ok", summary: MORNING_BRIEF, sessionId: briefingSession?.meta.id, at: briefingSession?.meta.createdAt } },
+      { name: "Weekly study plan", description: "Sunday-evening plan for the week ahead.", schedule: "every Sunday at 6pm", prompt: "Plan my study week around my classes, deadlines and exams in 45-minute blocks with breaks. Show it as a day-by-day table.", notify: { desktop: true, email: "never" } },
+      { silent: true, last: { status: "ok", summary: STUDY_PLAN, sessionId: planSession?.meta.id, at: planSession?.meta.createdAt } },
     );
     this.createAutomation(
-      { name: "Friday wrap-up", description: "Summary of the week.", schedule: "every Friday at 4pm", prompt: "Summarise my week from sent mail, meetings and Teams.", enabled: false, notify: { desktop: true, email: "auto" } },
+      { name: "Assignment radar", description: "Weekday-morning check for new or changed deadlines.", schedule: "every weekday at 8am", prompt: "Check my school email and Teams class posts for new or changed assignments and deadlines. List what's due in the next 7 days.", notify: { desktop: true, email: "auto" } },
       { silent: true },
     );
     this.createAutomation(
-      { name: "Watch for the Fabrikam contract", trigger: "condition", condition: "an email from Fabrikam legal with the signed contract has arrived", checkEveryMinutes: 15, prompt: "Tell me the contract arrived and list any changes from our last redline." },
+      { name: "Watch for ALGO2201 marks", trigger: "condition", condition: "an email or Teams post says ALGO2201 Assignment 1 marks have been released", checkEveryMinutes: 30, prompt: "Tell me my ALGO2201 Assignment 1 mark and summarise the feedback, with two things to improve for Assignment 2." },
       { silent: true },
     );
     for (const s of this.sessions.values()) if (s.meta.automationName) s.meta.automationId = this.automations.find((a) => a.name === s.meta.automationName)?.id;
@@ -456,6 +569,20 @@ class DemoServer {
     for (const p of this.inputs.values()) if (!sessionId || p.sessionId === sessionId) out.push({ type: "input", requestId: p.id, sessionId: p.sessionId, question: p.question, choices: p.choices, allowFreeform: true });
     return out;
   }
+  m365Status() {
+    const s = this.settings.m365;
+    const scopeGroups = SCOPE_GROUPS.map((g) => ({ ...g, enabled: s.scopeGroups.includes(g.id) }));
+    if (!s.enabled) return { provider: s.provider, state: "disabled", copilotLicense: s.copilotLicense, scopeGroups, tools: [] };
+    return {
+      provider: s.provider,
+      state: "ready",
+      user: USER,
+      copilotLicense: s.copilotLicense,
+      scopeGroups,
+      tools: CORE_TOOLS,
+      ...(s.provider === "graph" ? { signInApp: s.clientId ? "Your organisation's app registration" : "Microsoft Graph Command Line Tools", clientId: s.clientId, tenant: s.tenant } : {}),
+    };
+  }
   skillList() {
     const disabled = new Set(this.settings.disabledSkills);
     return this.skills
@@ -479,7 +606,7 @@ class DemoServer {
       app: { name: "OpenScout", version: "demo", host: "demo", dataDir: "your browser (demo — nothing is stored)" },
       settings: this.settings,
       github: this.github,
-      workiq: this.workiq,
+      m365: this.m365Status(),
       models: MODELS,
       personalities: PERSONALITIES,
       sessions: this.sessionList(),
@@ -586,13 +713,13 @@ class DemoServer {
     this.record(s.meta.id, { kind: "tool", toolCallId: rid("call_"), name: "m365_search", args: '{\n  "query": "…"\n}', success: true, result: "(demo results)" });
     const text =
       a.id === "heartbeat"
-        ? "- Dana Whitfield (Fabrikam) is waiting on multi-year pricing options before the 11:00 call."
-        : /wrap|friday/i.test(a.name)
-          ? WRAP_UP
-          : /brief/i.test(a.name)
-            ? MORNING_BRIEF
+        ? "- ALGO2201 Quiz 4 closes at 5:30pm today, and you haven't started it."
+        : /study plan/i.test(a.name)
+          ? STUDY_PLAN
+          : /radar/i.test(a.name)
+            ? RADAR
             : a.trigger === "condition"
-              ? "The signed contract from Fabrikam legal arrived at 10:42. Changes vs our last redline: §7 liability cap raised to 2× fees; renewal term set to 3 years."
+              ? "Your ALGO2201 Assignment 1 mark is out: **78/100 (Distinction)**. Feedback: clear code structure and good tests. To improve for Assignment 2: explain your complexity analysis, and handle empty inputs."
               : `Ran **${a.name}**. *(Demo output — the real app would run your prompt with GitHub Copilot and your Microsoft 365 data.)*`;
     this.record(s.meta.id, { kind: "assistant", text });
     Object.assign(run, { status: "ok", summary: text, sessionId: s.meta.id, finishedAt: iso() });
@@ -604,7 +731,7 @@ class DemoServer {
     this.publish("automations.changed", this.automationList());
     if (a.id === "heartbeat") this.publish("heartbeat", this.heartbeatInfo());
     this.publishSessions();
-    if (a.notify?.desktop !== false && this.settings.notifications.desktop) this.publish("notify", { title: a.name, body: text.replace(/[*_#>]/g, "").slice(0, 280), sessionId: s.meta.id, kind: "automation" });
+    if (a.notify?.desktop !== false && this.settings.notifications.desktop) this.publish("notify", { title: a.name, body: text.replace(/[*_#>|]/g, "").slice(0, 280), sessionId: s.meta.id, kind: "automation" });
     return run;
   }
 
@@ -844,6 +971,7 @@ class DemoServer {
         const prev = this.settings;
         this.settings = deepMerge(this.settings, p.patch ?? {});
         this.publish("settings.changed", this.settings);
+        if (JSON.stringify(prev.m365) !== JSON.stringify(this.settings.m365)) this.publish("status.m365", this.m365Status());
         if (JSON.stringify(prev.heartbeat) !== JSON.stringify(this.settings.heartbeat) || JSON.stringify(prev.workHours) !== JSON.stringify(this.settings.workHours)) {
           this.publish("heartbeat", this.heartbeatInfo());
         }
@@ -857,9 +985,9 @@ class DemoServer {
         return { launched: false, instructions: "Sign-in isn't available in the browser demo. Install OpenScout from GitHub to use your own GitHub Copilot account." };
       case "models.refresh":
         return MODELS;
-      case "workiq.refresh":
-      case "workiq.restart":
-        return this.workiq;
+      case "m365.refresh":
+      case "m365.restart":
+        return this.m365Status();
 
       case "memory.list":
         return this.memory;
@@ -951,9 +1079,9 @@ class DemoServer {
       }
 
       case "github.token":
+      case "m365.signIn":
+      case "m365.signOut":
       case "workiq.acceptEula":
-      case "workiq.signIn":
-      case "workiq.signOut":
       case "os.openPath":
       case "os.openWorkingFolder":
       case "os.openDataFolder":

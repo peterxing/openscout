@@ -43,12 +43,13 @@ const csp = [
   "base-uri 'none'",
   "form-action 'none'",
 ].join("; ");
-const description = "Browser demo of OpenScout, a Scout-style desktop work assistant that runs on your GitHub Copilot subscription with Microsoft 365 data through Work IQ.";
+const description =
+  "Try OpenScout for students in your browser: a study assistant that runs on GitHub Copilot and your school Microsoft 365 account — classes, assignments, lecture notes, study plans and quizzes. No Microsoft 365 Copilot licence needed.";
 const head = [
   '<meta charset="utf-8" />',
   `    <meta http-equiv="Content-Security-Policy" content="${csp}" />`,
   `    <meta name="description" content="${description}" />`,
-  '    <meta property="og:title" content="OpenScout — browser demo" />',
+  '    <meta property="og:title" content="OpenScout for students — browser demo" />',
   `    <meta property="og:description" content="${description}" />`,
   `    <meta property="og:image" content="${SITE_URL}assets/icon.png" />`,
   `    <meta property="og:url" content="${SITE_URL}" />`,
@@ -56,7 +57,7 @@ const head = [
 
 let html = fs.readFileSync(path.join(root, "web", "index.html"), "utf8");
 const replacements = [
-  ["<title>OpenScout</title>", "<title>OpenScout — browser demo</title>"],
+  ["<title>OpenScout</title>", "<title>OpenScout for students — browser demo</title>"],
   ['<meta charset="utf-8" />', head],
   ['<script type="module" src="app.js"></script>', '<script src="demo-config.js"></script>\n    <script type="module" src="app.js"></script>'],
 ];

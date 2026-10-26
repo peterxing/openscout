@@ -381,19 +381,29 @@ function renderPending(p) {
 }
 
 // ── Welcome ─────────────────────────────────────────────────────────────
-const SUGGESTIONS = [
-  ["Today's meetings", "What's on my calendar today? Flag conflicts and anything I need to prepare."],
-  ["Inbox triage", "Summarise my unread email from the last 24 hours and tell me which ones need a reply."],
-  ["Teams catch-up", "Catch me up on Teams chats from today that mention me or ask me something."],
-  ["Find my decks", "Find the PowerPoint decks I worked on most recently and list them with links."],
-  ["Morning briefing", "Create an automation that every weekday at 8am briefs me on my meetings, urgent email and Teams mentions."],
-  ["What can you do?", "What can you do for me? Give me a quick tour of your capabilities."],
-];
+const SUGGESTIONS = {
+  work: [
+    ["Today's meetings", "What's on my calendar today? Flag conflicts and anything I need to prepare."],
+    ["Inbox triage", "Summarise my unread email from the last 24 hours and tell me which ones need a reply."],
+    ["Teams catch-up", "Catch me up on Teams chats from today that mention me or ask me something."],
+    ["Find my decks", "Find the PowerPoint decks I worked on most recently and list them with links."],
+    ["Morning briefing", "Create an automation that every weekday at 8am briefs me on my meetings, urgent email and Teams mentions."],
+    ["What can you do?", "What can you do for me? Give me a quick tour of your capabilities."],
+  ],
+  student: [
+    ["Today's classes", "What classes and study sessions do I have today? Flag clashes and anything I need to prepare."],
+    ["Assignments due", "What assignments and deadlines do I have in the next two weeks? Check my school email and Teams class posts, and sort them by due date."],
+    ["Lecture notes", "Find the latest lecture slides in my OneDrive and turn them into concise notes with three practice questions."],
+    ["Email my tutor", "Draft a polite email to my tutor asking for a one-week extension on my assignment because I've been unwell."],
+    ["Weekly study plan", "Create an automation that every Sunday at 6pm plans my study week around my classes and deadlines in 45-minute blocks."],
+    ["Quiz me", "Quiz me on a topic I choose. Ask me which topic first, then give me five questions with answers I can reveal."],
+  ],
+};
 
 function greeting() {
   const hr = new Date().getHours();
   const part = hr < 12 ? "Good morning" : hr < 18 ? "Good afternoon" : "Good evening";
-  const first = state.workiq?.user?.displayName?.split(/\s+/)[0];
+  const first = state.m365?.user?.displayName?.split(/\s+/)[0];
   return first ? `${part}, ${first}` : part;
 }
 
@@ -405,27 +415,34 @@ export function statusPill(kind) {
     const text = ok ? `GitHub Copilot · ${g.login}` : g?.state === "starting" ? "GitHub Copilot · starting…" : "GitHub Copilot · not signed in";
     return h("div", { class: "pill", title: g?.message ?? text, onclick: () => setView("settings") }, h("span", { class: `status-dot ${cls}` }), text);
   }
-  const w = state.workiq;
-  const ok = w?.state === "ready";
-  const cls = ok ? "ok" : w?.state === "starting" ? "warn" : w?.state === "disabled" ? "" : "err";
-  const labels = { starting: "connecting…", "signed-out": "sign in needed", eula: "accept terms", error: "error", missing: "not installed", disabled: "off" };
-  const text = ok ? `Microsoft 365 · ${w.user?.displayName ?? "connected"}` : `Microsoft 365 · ${labels[w?.state] ?? "…"}`;
-  return h("div", { class: "pill", title: w?.message ?? text, onclick: () => setView("settings") }, h("span", { class: `status-dot ${cls}` }), text);
+  const m = state.m365;
+  const ok = m?.state === "ready";
+  const cls = ok ? "ok" : m?.state === "starting" || m?.state === "signing-in" ? "warn" : m?.state === "disabled" ? "" : "err";
+  const labels = { starting: "connecting…", "signing-in": "signing in…", "signed-out": "sign in needed", eula: "accept terms", error: "error", missing: "not installed", disabled: "off" };
+  const text = ok ? `Microsoft 365 · ${m.user?.displayName ?? "connected"}` : `Microsoft 365 · ${labels[m?.state] ?? "…"}`;
+  return h("div", { class: "pill", title: m?.message ?? text, onclick: () => setView("settings") }, h("span", { class: `status-dot ${cls}` }), text);
 }
 
 function renderWelcome() {
+  const student = state.settings?.audience === "student";
   messagesEl.replaceChildren(
     h(
       "div",
       { class: "welcome" },
       h("img", { src: "assets/icon.png", alt: "" }),
       h("h2", {}, greeting()),
-      h("div", { class: "muted" }, "Your desktop work assistant — GitHub Copilot models, with your Microsoft 365 data through Work IQ."),
-      h("div", { class: "checks" }, statusPill("github"), statusPill("workiq")),
+      h(
+        "div",
+        { class: "muted" },
+        student
+          ? "Your study assistant — GitHub Copilot models, with your school Microsoft 365 account for classes, email, Teams and files."
+          : "Your desktop work assistant — GitHub Copilot models, with your Microsoft 365 mail, calendar, Teams and files.",
+      ),
+      h("div", { class: "checks" }, statusPill("github"), statusPill("m365")),
       h(
         "div",
         { class: "suggestions" },
-        SUGGESTIONS.map(([t, p]) => h("div", { class: "suggestion", onclick: () => send(p) }, h("b", {}, t), h("span", { class: "muted small" }, p))),
+        SUGGESTIONS[student ? "student" : "work"].map(([t, p]) => h("div", { class: "suggestion", onclick: () => send(p) }, h("b", {}, t), h("span", { class: "muted small" }, p))),
       ),
     ),
   );

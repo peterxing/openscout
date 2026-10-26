@@ -1,7 +1,7 @@
 import path from "node:path";
 import type { PermissionRequest } from "@github/copilot-sdk";
+import { isM365ReadOnly } from "./m365.js";
 import { truncate } from "./util.js";
-import { TOOL_ALIASES, type WorkIqService } from "./workiq.js";
 
 export interface PermissionSummary {
   kind: string;
@@ -15,8 +15,6 @@ export interface PermissionSummary {
   risk: "low" | "medium" | "high";
   toolName?: string;
 }
-
-const ALIAS_TO_TOOL = Object.fromEntries(Object.entries(TOOL_ALIASES).map(([tool, alias]) => [alias, tool]));
 
 const APP_TOOL_TITLES: Record<string, string> = {
   automation_create: "Create an automation",
@@ -89,30 +87,30 @@ export function jsonPreview(v: unknown, max = 3000): string {
 
 function m365Title(tool: string, args: Record<string, unknown>): string {
   const url = String(args.actionUrl ?? args.parentUrl ?? args.entityUrl ?? "");
-  if (tool === "do_action") {
+  if (tool === "m365_action") {
     const seg = url.split("?")[0].split("/").filter(Boolean).pop()?.toLowerCase() ?? "";
     return ACTION_TITLES[seg] ?? `Microsoft 365 action: ${seg || url}`;
   }
-  if (tool === "create_entity") {
+  if (tool === "m365_create") {
     if (/\/chats\/[^/]+\/messages|\/channels\/[^/]+\/messages|\/replies$/i.test(url)) return "Post a Teams message";
     if (/\/messages\/?$/i.test(url)) return "Create an email draft";
     if (/\/events\/?$/i.test(url)) return "Create a calendar event (invites go to any attendees)";
     if (/\/todo\//i.test(url)) return "Create a To Do task";
     return "Create a Microsoft 365 item";
   }
-  if (tool === "update_entity") return "Update a Microsoft 365 item";
-  if (tool === "delete_entity") return "Delete a Microsoft 365 item";
-  return `Microsoft 365: ${tool}`;
+  if (tool === "m365_update") return "Update a Microsoft 365 item";
+  if (tool === "m365_delete") return "Delete a Microsoft 365 item";
+  return `Microsoft 365: ${tool.replace(/^m365_/, "")}`;
 }
 
 function m365Detail(tool: string, args: Record<string, unknown>): string {
-  const method = tool === "update_entity" ? "PATCH" : tool === "delete_entity" ? "DELETE" : "POST";
+  const method = tool === "m365_update" ? "PATCH" : tool === "m365_delete" ? "DELETE" : "POST";
   const url = String(args.actionUrl ?? args.parentUrl ?? args.entityUrl ?? "");
   const body = args.jsonBody !== undefined ? `\n\n${jsonPreview(args.jsonBody, 6000)}` : "";
   return `${method} ${url}${body}`;
 }
 
-export function summarizePermission(req: PermissionRequest, workiq: WorkIqService, appCtx?: AppToolContext): PermissionSummary {
+export function summarizePermission(req: PermissionRequest, appCtx?: AppToolContext): PermissionSummary {
   const r = req as any;
   switch (r.kind) {
     case "shell": {
@@ -166,13 +164,12 @@ export function summarizePermission(req: PermissionRequest, workiq: WorkIqServic
     case "custom-tool": {
       const name = String(r.toolName ?? "");
       const args = (r.args && typeof r.args === "object" ? r.args : {}) as Record<string, unknown>;
-      const m365 = ALIAS_TO_TOOL[name] ?? (name.startsWith("m365_") ? name.slice(5) : undefined);
-      if (m365) {
-        const readOnly = workiq.isReadOnly(m365, args);
+      if (name.startsWith("m365_")) {
+        const readOnly = isM365ReadOnly(name, args);
         return {
           kind: "m365",
-          title: m365Title(m365, args),
-          detail: m365Detail(m365, args),
+          title: m365Title(name, args),
+          detail: m365Detail(name, args),
           readOnly,
           key: `m365:${name}`,
           // Never remember approvals for writes to Microsoft 365: every send/change is confirmed.

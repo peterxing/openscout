@@ -26,9 +26,6 @@ export interface WorkIqStatus {
 export const LICENSED_TOOLS = new Set(["ask", "retrieve", "list_agents"]);
 /** Tools OpenScout never hands to the model (handled by the app UI instead). */
 const HIDDEN_TOOLS = new Set(["accept_eula", "get_debug_link"]);
-const KNOWN_READ_ONLY = new Set(["fetch", "fetch_blob", "call_function", "get_schema", "search_paths", "retrieve", "ask", "list_agents"]);
-/** do_action endpoints that only read data. */
-const READ_ONLY_ACTIONS = /(\/search\/query|\/getSchedule|\/findMeetingTimes|\/getMemberGroups|\/checkMemberGroups|\/getMemberObjects)\s*$/i;
 
 export const TOOL_ALIASES: Record<string, string> = {
   fetch: "m365_fetch",
@@ -88,7 +85,7 @@ export class WorkIqService {
 
   private async doStart(): Promise<void> {
     const s = this.settings.get();
-    if (!s.m365.enabled) {
+    if (!s.m365.enabled || s.m365.provider !== "workiq") {
       this.client?.stop();
       this.client = null;
       this.setStatus({ state: "disabled", tools: [] });
@@ -157,13 +154,6 @@ export class WorkIqService {
     return (this.client?.tools ?? []).filter((t) => !HIDDEN_TOOLS.has(t.name) && (licensed || !LICENSED_TOOLS.has(t.name)));
   }
 
-  isReadOnly(toolName: string, args?: Record<string, unknown>): boolean {
-    if (toolName === "do_action") return READ_ONLY_ACTIONS.test(String(args?.actionUrl ?? ""));
-    const t = this.client?.tools.find((x) => x.name === toolName);
-    if (t?.annotations?.readOnlyHint !== undefined) return t.annotations.readOnlyHint === true;
-    return KNOWN_READ_ONLY.has(toolName);
-  }
-
   async acceptEula(): Promise<WorkIqStatus> {
     await this.runCli(["accept-eula"], { input: "y\n", timeoutMs: 60_000 });
     await this.restart();
@@ -222,7 +212,8 @@ export class WorkIqService {
 
   private setStatus(s: Omit<WorkIqStatus, "copilotLicense">): void {
     this.status = { ...s, copilotLicense: this.settings.get().m365.copilotLicense };
-    this.bus.publish("status.workiq", this.status);
+    // M365Service re-publishes this to the UI when Work IQ is the active provider.
+    this.bus.emit("workiq.status", this.status);
   }
 }
 

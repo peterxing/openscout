@@ -3,7 +3,7 @@
   "productName": "OpenScout",
   "version": "0.1.0",
   "private": true,
-  "description": "A Scout-style desktop work assistant powered by GitHub Copilot (Copilot SDK), with Microsoft 365 data through the user's Work IQ access to Microsoft Graph. Does not call Microsoft 365 Copilot APIs unless you opt in.",
+  "description": "A Scout-style desktop assistant for work and study, powered by GitHub Copilot (Copilot SDK). Signs in to Microsoft 365 itself and calls Microsoft Graph with your own account, so no Microsoft 365 Copilot licence is needed. Work IQ is optional.",
   "type": "module",
   "main": "dist/electron/main.js",
   "repository": {
@@ -28,6 +28,8 @@
     "node": ">=22.12.0"
   },
   "dependencies": {
+    "@azure/msal-node": "^7.1.1",
+    "@azure/msal-node-extensions": "^5.5.3",
     "@github/copilot-sdk": "^1.0.26",
     "@highlightjs/cdn-assets": "^11.12.0",
     "@microsoft/workiq": "^1.0.1",

@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { graphUrl } from "../dist/server/graph.js";
+import { isM365ReadOnly } from "../dist/server/m365.js";
 import { shellAllowed, summarizePermission } from "../dist/server/permissions.js";
-import { Bus } from "../dist/server/util.js";
-import { WorkIqService } from "../dist/server/workiq.js";
 
 const allow = ["Get-ChildItem", "Get-Content", "Test-Path"];
 const shell = (text, ids) => ({ kind: "shell", fullCommandText: text, commands: ids.map((identifier) => ({ identifier, readOnly: false })), hasWriteFileRedirection: false });
@@ -27,22 +27,42 @@ test("shell allow-list rejects code execution and chaining", () => {
   for (const [text, ids] of cases) assert.equal(shellAllowed(shell(text, ids), allow), false, text);
 });
 
-const workiq = new WorkIqService(new Bus(), { get: () => ({ m365: { copilotLicense: false, account: "" } }) });
 const custom = (toolName, args) => ({ kind: "custom-tool", toolName, toolDescription: "", args });
 
 test("Microsoft 365 writes are high risk and never session-approvable", () => {
-  const send = summarizePermission(custom("m365_action", { actionUrl: "/me/sendMail", jsonBody: {} }), workiq);
+  const send = summarizePermission(custom("m365_action", { actionUrl: "/me/sendMail", jsonBody: {} }));
   assert.equal(send.readOnly, false);
   assert.equal(send.risk, "high");
   assert.equal(send.allowSession, false);
   assert.equal(send.title, "Send an email");
-  const search = summarizePermission(custom("m365_action", { actionUrl: "/search/query", jsonBody: {} }), workiq);
+  const search = summarizePermission(custom("m365_action", { actionUrl: "/search/query", jsonBody: {} }));
   assert.equal(search.readOnly, true);
+  assert.equal(summarizePermission(custom("m365_create", { parentUrl: "/me/events", jsonBody: {} })).title, "Create a calendar event (invites go to any attendees)");
+});
+
+test("Microsoft 365 read-only classification", () => {
+  assert.equal(isM365ReadOnly("m365_fetch"), true);
+  assert.equal(isM365ReadOnly("m365_search"), true);
+  assert.equal(isM365ReadOnly("m365_action", { actionUrl: "/me/calendar/getSchedule" }), true);
+  assert.equal(isM365ReadOnly("m365_action", { actionUrl: "/me/messages/AAMk=/forward" }), false);
+  assert.equal(isM365ReadOnly("m365_action", { actionUrl: "/me/sendMail?x=/search/query" }), false);
+  assert.equal(isM365ReadOnly("m365_update"), false);
+  assert.equal(isM365ReadOnly("m365_delete"), false);
+});
+
+test("Graph paths stay on graph.microsoft.com", () => {
+  assert.equal(graphUrl("/me/messages?$top=5").href, "https://graph.microsoft.com/v1.0/me/messages?$top=5");
+  assert.equal(graphUrl("/beta/me/profile").href, "https://graph.microsoft.com/beta/me/profile");
+  assert.equal(graphUrl('/me/messages?$search="quarterly budget"').search, "?$search=%22quarterly%20budget%22");
+  for (const bad of ["https://evil.example/x", "//evil.example/x", "me/messages", "/me\n/messages", ""]) {
+    assert.throws(() => graphUrl(bad), undefined, bad);
+  }
+  assert.equal(graphUrl("/@evil.example/x").origin, "https://graph.microsoft.com");
 });
 
 test("automation tools are classified by their effective privilege", () => {
   const ctx = { automationAllowsActions: (id) => (id === "privileged" ? true : id === "plain" ? false : undefined) };
-  const sum = (name, args) => summarizePermission(custom(name, args), workiq, ctx);
+  const sum = (name, args) => summarizePermission(custom(name, args), ctx);
   assert.equal(sum("automation_update", { id: "privileged", name: "x" }).risk, "high", "omitted allowActions keeps privilege");
   assert.equal(sum("automation_update", { id: "plain", allowActions: true }).risk, "high", "escalation");
   assert.equal(sum("automation_update", { id: "privileged", allowActions: false }).readOnly, true, "de-escalation");
